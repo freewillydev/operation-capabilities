@@ -34,12 +34,12 @@ instance Operation Note NoteCaps where
       Just Refl -> Just (render value)
       Nothing -> Nothing
 
-clean :: Stage '[Labelled, Editable]
+clean :: Stage String '[Labelled, Editable]
 clean = Stage $ \value ->
   if label value == "note" then Right (edit (unwords . words) value)
   else Left "expected a note"
 
-notePipeline :: Pipeline NoteCaps NoteCaps '[Renderable]
+notePipeline :: Pipeline String (SomeOperationWith NoteCaps NoteCaps) (SomeOperationWith NoteCaps '[Renderable])
 notePipeline =
   Restrict (Proxy @'[Labelled, Editable]) :>>>
   Preserve clean :>>>

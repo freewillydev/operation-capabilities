@@ -1,3 +1,9 @@
+## 0.2.0.0
+
+- Breaking: Pipeline indexes error/input/output; Stage takes an error type.
+- Add Transform and typed Interpret/Selection; preserve capability projection.
+- Test endpoint/error/outcome mismatches and deferred interpretation effects.
+
 # Changelog
 
 ## 0.1.0.0

@@ -7,7 +7,7 @@
 -- preparation pipelines. Capability visibility is an API discipline, not a
 -- security sandbox against arbitrary Haskell code or nontermination.
 module Control.Operation (Operation(..), SomeOperation(..), SomeOperationWith, Capabilities, UniqueCapabilities,
-  Subset, Stage(..), Pipeline(..), prepare, pipeline, withCapabilities, forgetCapabilities, execute) where
+  Subset, Stage(..), Selection(..), Pipeline(..), prepare, pipeline, withCapabilities, forgetCapabilities, execute) where
 
 import Data.Kind (Constraint, Type)
 import Data.Maybe (fromMaybe)
@@ -87,27 +87,44 @@ forgetCapabilities (WithCapabilities value) = SomeOperation value
 
 -- | A preparation step preserving the hidden payload type. It receives only the
 -- visible dictionaries, not the full canonical capability dictionary.
-newtype Stage visible = Stage
-  (forall op declared. (Operation op declared, Capabilities visible op) => op -> Either String op)
+newtype Stage error visible = Stage
+  (forall op declared. (Operation op declared, Capabilities visible op) => op -> Either error op)
 
--- | A typed path through capability views, never exceeding the declared set.
-data Pipeline declared before after where
-  Identity :: Pipeline declared caps caps -- ^ Leave payload and visibility unchanged.
-  Preserve :: Stage caps -> Pipeline declared caps caps -- ^ Prepare without changing visibility.
+-- | A DSL selection whose operation produces exactly the next stage's input.
+-- The equality is evidence about the result type, not financial authorization.
+data Selection result op where
+  Select :: (Outcome op ~ result) => DSL op -> Selection result op
+
+-- | A path indexed by error, input and output types. Capability-view steps keep
+-- the hidden payload; Transform changes a concrete value's type. It grants no
+-- dictionaries and is not a sandbox for arbitrary functions or embedded IO.
+data Pipeline error input output where
+  Identity :: Pipeline error a a
+  Transform :: (a -> Either error b) -> Pipeline error a b
+  Preserve :: Stage error caps
+    -> Pipeline error (SomeOperationWith declared caps) (SomeOperationWith declared caps)
   Restrict :: (UniqueCapabilities next, Subset next current, Subset next declared)
-    => Proxy next -> Pipeline declared current next -- ^ Hide capabilities; never add them.
+    => Proxy next -> Pipeline error (SomeOperationWith declared current) (SomeOperationWith declared next)
   Expand :: (UniqueCapabilities next, Subset current next, Subset next declared)
-    => Proxy next -> Pipeline declared current next -- ^ Restore only declared capabilities.
-  (:>>>) :: Pipeline declared before middle -> Pipeline declared middle after -> Pipeline declared before after
+    => Proxy next -> Pipeline error (SomeOperationWith declared current) (SomeOperationWith declared next)
+  -- Selection sees only visible capabilities. Canonical evidence is supplied
+  -- internally to interpret, which remains responsible for checking the payload.
+  Interpret :: error
+    -> (forall op. (Operation op declared, Capabilities visible op) => op -> Selection result op)
+    -> Pipeline error (SomeOperationWith declared visible) result
+  (:>>>) :: Pipeline error a b -> Pipeline error b c -> Pipeline error a c
 infixr 1 :>>>
 
--- | Run preparation left-to-right, stopping on the first 'Left'. No implicit interpretation.
-pipeline :: Pipeline declared before after -> SomeOperationWith declared before
-  -> Either String (SomeOperationWith declared after)
+-- | Run left-to-right, stopping on the first Left. Interpret is explicit;
+-- returning an IO-valued outcome never executes that action here.
+pipeline :: Pipeline error input output -> input -> Either error output
 pipeline Identity value = Right value
+pipeline (Transform step) value = step value
 pipeline (Preserve (Stage stage)) (WithCapabilities value) = WithCapabilities <$> stage value
 pipeline (Restrict proxy) value = Right (reframe proxy value)
 pipeline (Expand proxy) value = Right (reframe proxy value)
+pipeline (Interpret mismatch select) (WithCapabilities value) = case select value of
+  Select dsl -> maybe (Left mismatch) Right (interpret (SomeOperation value) dsl)
 pipeline (first :>>> rest) value = pipeline first value >>= pipeline rest
 
 reframe :: forall next declared previous. (UniqueCapabilities next, Subset next declared)

@@ -15,11 +15,13 @@ import Test.QuickCheck hiding (Positive)
 import Test.QuickCheck.Random (mkQCGen)
 
 data Counter = Counter Integer (IORef Int)
-class Observed op where
+class (Outcome op ~ IO Integer) => Observed op where
   observe :: op -> IO Integer
+  observation :: Bool -> op -> DSL op
 class Adjustable op where
   adjust :: (Integer -> Integer) -> op -> op
 instance Observed Counter where
+  observation accepted _ = if accepted then Observe else Reject
   observe (Counter value calls) = modifyIORef' calls (+1) >> pure value
 instance Adjustable Counter where
   adjust f (Counter value calls) = Counter (f value) calls
@@ -29,6 +31,8 @@ instance Operation Counter CounterCaps where
   type Outcome Counter = IO Integer
   data DSL Counter where
     Observe :: Context Counter => DSL Counter
+    Reject :: Context Counter => DSL Counter
+  interpret _ Reject = Nothing
   interpret (SomeOperation (value :: actual)) Observe =
     case eqT @actual @Counter of
       Just Refl -> Just (observe value)
@@ -72,7 +76,7 @@ lazyMismatch = forAll (elements [0 :: Int,1,2]) $ \index -> ioProperty $ do
                   result === Nothing,
                   if index == 2 then property True else interpret request (Validate @Positive) === Nothing]
 
-counterPipeline :: Pipeline CounterCaps CounterCaps '[Observed]
+counterPipeline :: Pipeline String (SomeOperationWith CounterCaps CounterCaps) (SomeOperationWith CounterCaps '[Observed])
 counterPipeline = Restrict (Proxy @'[Adjustable]) :>>>
   Preserve (Stage (Right . adjust (+2))) :>>>
   Preserve (Stage (Right . adjust (*3))) :>>>
@@ -115,11 +119,38 @@ shortCircuit n = ioProperty $ do
   count <- readIORef calls
   pure $ conjoin [message === "rejected", count === 0]
 
+-- Distinct intermediate types and a non-string error exercise indexed stages.
+data PreparationError = InvalidAmount | Mismatched deriving (Eq, Show)
+newtype CheckedAmount = CheckedAmount Integer
+
+typedStages :: Integer -> Property
+typedStages n =
+  let check value = if value >= 0 then Right (CheckedAmount value) else Left InvalidAmount
+      finish (CheckedAmount value) = Right (show value)
+      route = Transform check :>>> Transform finish
+  in pipeline route n === if n >= 0 then Right (show n) else Left InvalidAmount
+
+terminalInterpretation :: Integer -> Bool -> Property
+terminalInterpretation n accepted = ioProperty $ do
+  calls <- newIORef 0
+  let route = Restrict (Proxy @'[Observed]) :>>> Interpret Mismatched (Select . observation accepted)
+  case pipeline route (prepare (Counter n calls)) of
+    Left problem -> do
+      count <- readIORef calls
+      pure $ conjoin [property (not accepted), problem === Mismatched, count === 0]
+    Right action -> do
+      before <- readIORef calls
+      result <- action
+      after <- readIORef calls
+      pure $ conjoin [property accepted, before === 0, result === n, after === 1]
+
 main :: IO ()
 main = do
   results <- mapM (\(name,prop) -> putStrLn name >> quickCheckWithResult
     stdArgs {maxSuccess = 10000, replay = Just (mkQCGen 20261009, 0)} prop)
-    [("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
+    [("typed input/output stages",property typedStages),
+     ("typed terminal interpretation defers IO",property terminalInterpretation),
+     ("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
      ("all payload/constructor pairs",property dispatchMatrix), ("lazy mismatches",lazyMismatch),
      ("explicit capability restriction/restoration and deferred effects",property deferredEffects),
      ("pipeline identity and composition",property composition),

@@ -88,10 +88,13 @@ canonical dictionaries privately. `prepare value` starts with all declared
 capabilities visible. Its constructor is not exported; both type parameters have
 nominal roles, preventing `coerce` from widening visibility.
 
-`Pipeline declared before after` records the change in visible capabilities:
+`Pipeline error input output` records each stage’s input and output types.
+Capability views remain indexed by `SomeOperationWith declared visible`:
 
 | Constructor | Meaning |
 | --- | --- |
+| `Transform step` | Change a concrete input into a distinct output, or return a typed error |
+| `Interpret mismatch select` | Select a DSL with visible capabilities and produce its typed outcome |
 | `Identity` | Keep the payload and capabilities unchanged |
 | `Preserve stage` | Prepare the payload without changing visible capabilities |
 | `Restrict proxy` | Expose a subset of the current capabilities |
@@ -106,7 +109,8 @@ payload happens to have an instance of it.
 ```haskell
 type NoteCaps = '[Labelled, Editable, Renderable]
 
-notePipeline :: Pipeline NoteCaps NoteCaps '[Renderable]
+notePipeline :: Pipeline String (SomeOperationWith NoteCaps NoteCaps)
+  (SomeOperationWith NoteCaps '[Renderable])
 notePipeline =
   Restrict (Proxy @'[Labelled, Editable]) :>>>
   Preserve clean :>>>
@@ -115,13 +119,21 @@ notePipeline =
   Restrict (Proxy @'[Renderable])
 ```
 
-A rank-2 `Stage visible` receives only that view's dictionaries. It can prepare
+A rank-2 `Stage error visible` receives only that view's dictionaries. It can prepare
 and reject requests, but must return the same hidden payload type. It does not
 receive the full canonical capability constraint. Dictionary projection uses
 typed evidence, not `unsafeCoerce`.
 
-`pipeline` stops on the first `Left` and never automatically calls `interpret`.
-Only dispatch when ready:
+`pipeline` stops on the first `Left`. Interpretation occurs only at an explicit
+`Interpret` step (or through manual dispatch below). `Select dsl` carries
+`Outcome op ~ result`, so subsequent stages receive exactly the interpreted
+result type. An IO-valued outcome is returned without running it.
+
+`Transform` permits phase wrappers such as `Draft -> Either Error Validated`.
+It grants no capability evidence and is not a sandbox; use private constructors
+to establish phase invariants. Financial freshness still requires runtime checks.
+
+Manual dispatch remains available:
 
 ```haskell
 pending <- pipeline notePipeline (prepare (Note text))
@@ -184,3 +196,11 @@ actual workflow results before claiming those platforms have passed.
 See [docs/HANDOFF.md](docs/HANDOFF.md) for a concise adoption message for another
 chat, and [NOTICE](NOTICE) for provenance. No Elements node, wallet, network,
 credentials, or FFI runtime are required.
+
+## Upgrading from 0.1
+
+Replace `Pipeline declared before after` with
+`Pipeline error (SomeOperationWith declared before) (SomeOperationWith declared after)`
+and `Stage visible` with `Stage error visible`. Choose `String` to retain old
+error behavior, or a domain error type. `Operation`, `Outcome`, `DSL` and `eqT`
+interpretation are unchanged. Endpoint type mismatches now fail compilation.

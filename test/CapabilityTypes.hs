@@ -46,29 +46,29 @@ packed :: SomeOperation
 packed = pack Request
 
 #ifdef EXTRA_DUPLICATE
-additional :: Pipeline '[Named] '[Named] '[Named, Named]
+additional :: Pipeline String (SomeOperationWith '[Named] '[Named]) (SomeOperationWith '[Named] '[Named, Named])
 additional = Expand Proxy
 #endif
 
 #ifdef ARBITRARY
 class Unrelated op
 instance Unrelated Request
-additional :: Pipeline '[Named] '[Named] '[Named, Unrelated]
+additional :: Pipeline String (SomeOperationWith '[Named] '[Named]) (SomeOperationWith '[Named] '[Named, Unrelated])
 additional = Expand Proxy
 #endif
 
 #ifdef RESTRICTED
-restricted :: Stage '[]
+restricted :: Stage String '[]
 restricted = Stage $ \request -> Right (if name request == "request" then request else request)
 #endif
 
 #ifdef RESTRICT_EXPANDS
-additional :: Pipeline '[Named] '[] '[Named]
+additional :: Pipeline String (SomeOperationWith '[Named] '[]) (SomeOperationWith '[Named] '[Named])
 additional = Restrict Proxy
 #endif
 
 #ifdef EXPAND_RESTRICTS
-additional :: Pipeline '[Named] '[Named] '[]
+additional :: Pipeline String (SomeOperationWith '[Named] '[Named]) (SomeOperationWith '[Named] '[])
 additional = Expand Proxy
 #endif
 
@@ -89,7 +89,7 @@ repacked = case packed of SomeOperation request -> pack request
 oldInterpret :: SomeOperation -> DSL Request -> Maybe String
 oldInterpret = interpret
 
-scoped :: Pipeline '[Named] '[Named] '[Named]
+scoped :: Pipeline String (SomeOperationWith '[Named] '[Named]) (SomeOperationWith '[Named] '[Named])
 scoped = Restrict (Proxy :: Proxy '[]) :>>> Preserve (Stage Right) :>>> Expand Proxy
 
 prepared :: Either String (SomeOperationWith '[Named] '[Named])
@@ -105,3 +105,20 @@ instance Operation Other '[Named] where
   data DSL Other where
     OtherName :: Context Other => DSL Other
   interpret _ OtherName = Just (name Other)
+
+#ifdef BAD_COMPOSITION
+badComposition :: Pipeline String Int Bool
+badComposition = Transform (Right . show) :>>> Transform (Right . not)
+#endif
+#ifdef BAD_OUTCOME
+badOutcome :: Selection Bool Request
+badOutcome = Select Naming
+#endif
+#ifdef BAD_ERROR
+badError :: Pipeline Bool Int String
+badError = Transform (const $ Left "wrong error type")
+#endif
+#ifdef HIDDEN_SELECTION
+hiddenSelection :: Pipeline String (SomeOperationWith '[Named] '[]) String
+hiddenSelection = Interpret "mismatch" (\value -> name value `seq` error "unreachable")
+#endif

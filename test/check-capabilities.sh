@@ -10,7 +10,7 @@ compile() {
 }
 compile
 printf 'PASS inferred capability list, existential dictionaries, unchanged interpret\n'
-for variant in MISSING DUPLICATE CONFLICT EXTRA_DUPLICATE ARBITRARY RESTRICTED RESTRICT_EXPANDS EXPAND_RESTRICTS COERCE_VIEW PRIVATE_CONSTRUCTOR; do
+for variant in MISSING DUPLICATE CONFLICT EXTRA_DUPLICATE ARBITRARY RESTRICTED RESTRICT_EXPANDS EXPAND_RESTRICTS COERCE_VIEW PRIVATE_CONSTRUCTOR BAD_COMPOSITION BAD_OUTCOME BAD_ERROR HIDDEN_SELECTION; do
     if compile "-D$variant" > "$work/$variant.log" 2>&1; then
         printf 'FAIL %s unexpectedly compiled\n' "$variant" >&2
         exit 1
@@ -20,8 +20,8 @@ for variant in MISSING DUPLICATE CONFLICT EXTRA_DUPLICATE ARBITRARY RESTRICTED R
         DUPLICATE|EXTRA_DUPLICATE) expected='Duplicate operation capability' ;;
         CONFLICT) expected='Functional dependencies conflict' ;;
         ARBITRARY|RESTRICT_EXPANDS|EXPAND_RESTRICTS) expected='No instance for' ;;
-        RESTRICTED) expected='Could not deduce.*Named' ;;
-        COERCE_VIEW) expected="Couldn't match type" ;;
+        RESTRICTED|HIDDEN_SELECTION) expected='Could not deduce.*Named' ;;
+        BAD_COMPOSITION|BAD_OUTCOME|BAD_ERROR|COERCE_VIEW) expected="Couldn't match type" ;;
         PRIVATE_CONSTRUCTOR) expected='Data constructor not in scope' ;;
     esac
     if ! grep -Eq "$expected" "$work/$variant.log"; then

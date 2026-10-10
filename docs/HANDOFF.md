@@ -21,11 +21,12 @@ Preserve these design requirements:
    `Validation`/`Check` adapter where it removes repetition, not as a universal
    action dispatcher.
 6. Prepare requests through `SomeOperationWith declared visible` and
-   `Pipeline declared before after`. `prepare` starts fully visible; `Preserve`
+   `Pipeline error input output`. `prepare` starts fully visible; `Preserve`
    keeps capabilities, `Restrict` hides them, and `Expand` restores only declared
    ones. An undeclared class must never become available through expansion.
-7. Compose stages with `:>>>`. Preserve the hidden payload type, stop on `Left`,
-   and do not automatically interpret. Stage implementations only receive their
+7. Compose matching input/output types with `:>>>` and stop on `Left`.
+   `Preserve` keeps the hidden payload; `Transform` changes a concrete type.
+   `Interpret` explicitly returns the selected DSL outcome using `Select` equality. Stage implementations only receive their
    visible dictionaries. Keep the envelope constructor private.
 8. Use `forgetCapabilities` only at the terminal dispatch boundary; it erases the
    visibility index but retains canonical dictionaries. This is not a security
