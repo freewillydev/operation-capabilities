@@ -1,0 +1,53 @@
+cabal-version: 2.4
+name: operation-capabilities
+version: 0.1.0.0
+synopsis: Capability-constrained existential operations and typed pipelines
+description:
+  Declare a unique capability list for each operation, preserve class dictionaries
+  in existential requests, and prepare requests through statically checked
+  capability-preserving, restricting, and expanding pipelines before dispatch.
+category: Control
+license: MIT
+license-file: LICENSE
+author: Operation Capabilities contributors
+maintainer: https://github.com/freewillydev/operation-capabilities/issues
+homepage: https://github.com/freewillydev/operation-capabilities
+bug-reports: https://github.com/freewillydev/operation-capabilities/issues
+build-type: Simple
+tested-with: GHC ==9.6.7
+extra-doc-files:
+  README.md
+  CHANGELOG.md
+  NOTICE
+  docs/HANDOFF.md
+extra-source-files:
+  test/CapabilityTypes.hs
+  test/check-capabilities.sh
+
+source-repository head
+  type: git
+  location: https://github.com/freewillydev/operation-capabilities.git
+
+library
+  exposed-modules: Control.Operation, Control.Operation.Validation
+  hs-source-dirs: src
+  build-depends: base >=4.18 && <5
+  default-language: Haskell2010
+  ghc-options: -Wall
+
+executable operation-capabilities-example
+  main-is: Main.hs
+  other-modules: Demo
+  hs-source-dirs: examples
+  build-depends: base >=4.18 && <5, operation-capabilities
+  default-language: Haskell2010
+  ghc-options: -Wall
+
+test-suite properties
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules: Demo
+  hs-source-dirs: test, examples
+  build-depends: base >=4.18 && <5, operation-capabilities, QuickCheck ==2.15.0.1
+  default-language: Haskell2010
+  ghc-options: -Wall -threaded

@@ -1,0 +1,29 @@
+name: Haskell
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: haskell-actions/setup@0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d # v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.12.1.0'
+      - run: cabal update
+      - run: cabal check
+      - run: cabal build all --ghc-options=-Werror
+      - run: cabal test all --test-show-details=direct
+      - run: cabal run operation-capabilities-example
+      - run: bash test/check-capabilities.sh
+        shell: bash
+      - run: cabal haddock all
+      - run: cabal sdist

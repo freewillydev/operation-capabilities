@@ -1,0 +1,8 @@
+The core Operation and Validation modules were extracted from the local
+refactor/haskell-drivechain-rules implementation of
+https://github.com/freewillydev/liquid-drivechain-signet-adaptation
+on 2026-10-09. Their original MIT copyright notices are retained.
+
+This package contains no Elements consensus, wallet, network, FFI, or runtime
+configuration. It is independently versioned and tested. It does not imply
+endorsement by the upstream Elements project.
