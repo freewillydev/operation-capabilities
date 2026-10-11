@@ -4,7 +4,10 @@ module Main where
 
 import Control.Monad (unless)
 import Control.Operation
+import Control.Operation.Severity
 import Control.Operation.Validation
+import qualified SeverityTypes as S
+import Control.Exception (evaluate)
 import Data.Char (toUpper)
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef')
 import Data.Proxy (Proxy(..))
@@ -115,11 +118,35 @@ shortCircuit n = ioProperty $ do
   count <- readIORef calls
   pure $ conjoin [message === "rejected", count === 0]
 
+severityDispatch :: Integer -> Property
+severityDispatch n = ioProperty $ do
+  calls <- newIORef (0 :: Int)
+  packed <- evaluate (S.criticalOperation (modifyIORef' calls (+1) >> pure n))
+  before <- readIORef calls
+  resolved <- evaluate (resolveOperation packed)
+  after <- readIORef calls
+  value <- case resolved of
+    Just (S.WriteValue action) -> action
+    Nothing -> fail "critical dispatch mismatch"
+  final <- readIORef calls
+  let safe = case resolveOperation (S.safeOperation n) of
+        Just (S.ReadValue result) -> result == n
+        Nothing -> False
+      mismatched = case interpret (SomeOperation (S.WriteNumber (pure n))) S.ReadingDSL of
+        Nothing -> True
+        Just _ -> False
+  let rejected = case resolveOperation (prepareOperation S.rejectDSL (prepare (S.ReadNumber n))) of
+        Nothing -> True
+        Just _ -> False
+  pure $ conjoin [property safe, property mismatched, property rejected, before === 0,
+                  after === 0, value === n, final === 1]
+
 main :: IO ()
 main = do
   results <- mapM (\(name,prop) -> putStrLn name >> quickCheckWithResult
     stdArgs {maxSuccess = 10000, replay = Just (mkQCGen 20261009, 0)} prop)
-    [("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
+    [("severity-indexed pure preparation and deferred effects",property severityDispatch),
+     ("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
      ("all payload/constructor pairs",property dispatchMatrix), ("lazy mismatches",lazyMismatch),
      ("explicit capability restriction/restoration and deferred effects",property deferredEffects),
      ("pipeline identity and composition",property composition),

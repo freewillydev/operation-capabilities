@@ -5,7 +5,7 @@ them prematurely. Each operation declares its capability classes once. Pipelines
 make changes to the visible subset explicit and statically checked.
 
 The library depends only on `base`. QuickCheck is a test-only dependency.
-Tested with GHC 9.6.7. MIT licensed. This package is not yet published to Hackage.
+Tested with GHC 9.6.7; the severity extension is verified with GHC 9.14.1. MIT licensed. This package is not yet published to Hackage.
 
 ## Get started
 
@@ -26,10 +26,10 @@ To use the package from another Cabal project, add this to `cabal.project`:
 source-repository-package
   type: git
   location: https://github.com/freewillydev/operation-capabilities.git
-  tag: v0.1.0.0
+  tag: v0.1.1.0
 ```
 
-Then add `operation-capabilities ==0.1.0.0` to the component's `build-depends`.
+Then add `operation-capabilities ==0.1.1.0` to the component's `build-depends`.
 For an immutable dependency, replace the tag with its resolved full commit SHA.
 The implementation is in `Control.Operation`; the optional generic rule adapter
 is in `Control.Operation.Validation`.
@@ -184,3 +184,35 @@ actual workflow results before claiming those platforms have passed.
 See [docs/HANDOFF.md](docs/HANDOFF.md) for a concise adoption message for another
 chat, and [NOTICE](NOTICE) for provenance. No Elements node, wallet, network,
 credentials, or FFI runtime are required.
+
+## Safe and critical dispatch
+
+`Control.Operation.Severity` supplies `Severity = Safe | Critical` and the opaque
+`SomeOperationAt program caller severity result` existential. Use it directly as
+a handler carrier, such as `SomeOperationAt Program Signer Critical`; no local
+request wrapper is required. Its four parameters are nominal, so `coerce` cannot
+change caller, severity, program or result.
+
+```haskell
+prepareOperation
+  :: (forall op. (Operation op declared, Capabilities visible op)
+      => op -> OperationDSL (program caller severity result) op)
+  -> SomeOperationWith declared visible
+  -> SomeOperationAt program caller severity result
+
+resolveOperation
+  :: SomeOperationAt program caller severity result
+  -> Maybe (program caller severity result)
+```
+
+The selector returns `OperationDSL dsl`, proving that `Outcome op` equals the
+indexed program. It sees only the current visible capabilities. Existing pipelines
+may prepare/restrict a payload before packing. Packing selects the DSL; only
+`resolveOperation` calls the operation's existing `interpret`. Keep its payload
+`eqT` check. Resolution returns the program without executing IO stored within it.
+
+Define a closed application GADT for `program`, then route its `Safe` and `Critical`
+values to separate evaluators. Severity is a type contract supplied by your
+instances, not a security sandbox: authentication, financial checks, serialization
+and key access still belong to the application. See [test/SeverityTypes.hs](test/SeverityTypes.hs)
+for a complete compiling example and rejection tests.
