@@ -310,3 +310,76 @@ values to separate evaluators. Severity is a type contract supplied by your
 instances, not a security sandbox: authentication, financial checks, serialization
 and key access still belong to the application. See [test/SeverityTypes.hs](test/SeverityTypes.hs)
 for a complete compiling example and rejection tests.
+
+## Value-dependent workflows
+
+`Control.Operation.Flow` is an optional interpreter layer, separate from the
+existing capability preparation `Pipeline`. It does not replace `Operation` or
+change `interpret`. Its type is `Flow instruction before after result`, where
+`before` and `after` are lists of actual heterogeneous state types and `result`
+is a separate runtime value returned to a continuation.
+
+- `Pure` returns a value without changing state.
+- `Step` stores an application instruction GADT, including its constraints.
+- `Bind` builds the next program from the preceding runtime result.
+- `Branch` chooses a program using the current heterogeneous state.
+
+`Values xs` holds the indexed state through `VNil` and `(:&)`. Unlike a list of
+labels, these indices describe values that the interpreter actually threads.
+Both branches must agree on their resulting state list and returned value type.
+
+With `QualifiedDo`, only the named block uses the flow operators:
+
+```haskell
+{-# LANGUAGE QualifiedDo #-}
+import qualified Control.Operation.Flow as F
+
+payment = F.do
+  amount <- F.step VerifyAmount
+  let fee = if amount > 100 then 2 else 1
+  F.step (SettleAmount fee)
+```
+
+The fee is computed after `VerifyAmount` returns, not while assembling the
+program. This uses ordinary Haskell `if` on the returned value. Instructions
+and dictionaries come from the application; Flow does not discover or grant
+additional capabilities. See [examples/FlowExample.hs](examples/FlowExample.hs)
+for the full action GADT, capability instances and `Operation` integration.
+That interpreter proves payload equality before inspecting its DSL, then calls
+`runFlow`; its instruction handler matches the GADT to obtain method dictionaries.
+For runtime schema selection, retain `IndexedRequest` and its declared-capability
+checks before executing the selected workflow.
+
+`runFlow` accepts a polymorphic handler:
+
+```haskell
+forall xs ys a. instruction xs ys a -> Values xs -> m (a, Values ys)
+```
+
+It preserves the indices through each step and returns `m (result, Values after)`.
+The chosen monad defines failure/effect semantics: `Either` stops on `Left`, while
+`IO` performs effects only when the returned action is executed. Unselected
+branches and continuations following a monadic failure are not evaluated.
+
+For dedicated workflow modules, enable `RebindableSyntax` and import
+`Control.Operation.Flow.Rebindable` instead of Prelude. Unqualified `do` then
+builds Flow, and `if predicate then yes else no` builds `Branch` with
+`predicate :: Values before -> Bool`. A bound runtime value can be captured by
+either branch. See [test/FlowRebindable.hs](test/FlowRebindable.hs). This is a
+different condition type from ordinary Boolean `if`; use a predicate such as
+`const condition` for an already computed Boolean, or use ordinary `case`.
+
+Prefer QualifiedDo when mixing workflows with ordinary IO/Either code. The
+optional prelude deliberately supplies no `fail`: use explicit `case` and domain
+instructions for refutable-pattern/error handling, rather than introducing an
+implicit failure policy. No ApplicativeDo or recursive-do support is supplied.
+
+Flow does not promise rollback, linear consumption, a serializable syntax tree
+(Bind contains Haskell functions), authorization, or stack-safe unbounded bind
+chains. Construction stores instructions and functions without interpreting
+them; arbitrary bottoms in caller expressions still follow Haskell evaluation
+rules. Re-running an effectful Flow re-runs its effects.
+
+Validation: `cabal test` exercises both syntax styles and Operation dispatch;
+`bash test/check-flow.sh` checks valid programs and rejects bad state transitions,
+branch outputs, returned values and missing instruction capabilities.

@@ -1,5 +1,5 @@
 {-# LANGUAGE ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses, ScopedTypeVariables, TypeApplications, TypeFamilies, KindSignatures, PolyKinds #-}
+{-# LANGUAGE MultiParamTypeClasses, ScopedTypeVariables, TypeApplications, TypeFamilies, KindSignatures, PolyKinds, TypeOperators #-}
 module Main where
 
 import Control.Monad (unless)
@@ -17,6 +17,7 @@ import Data.Proxy (Proxy(..))
 import Data.Typeable (eqT, (:~:)(Refl))
 import Demo
 import Planning
+import FlowTests (flowProperties)
 import System.Exit (exitFailure)
 import Test.QuickCheck hiding (Positive)
 import Test.QuickCheck.Random (mkQCGen)
@@ -196,12 +197,12 @@ main :: IO ()
 main = do
   results <- mapM (\(name,prop) -> putStrLn name >> quickCheckWithResult
     stdArgs {maxSuccess = 10000, replay = Just (mkQCGen 20261009, 0)} prop)
-    [("severity-indexed pure preparation and deferred effects",property severityDispatch),
+    (flowProperties ++ [("severity-indexed pure preparation and deferred effects",property severityDispatch),
      ("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
      ("all payload/constructor pairs",property dispatchMatrix), ("lazy mismatches",lazyMismatch),
      ("explicit capability restriction/restoration and deferred effects",property deferredEffects),
      ("pipeline identity and composition",property composition),
      ("rejection short-circuiting without interpretation",property shortCircuit),
      ("multi-capability interpretation after Refl",property complexDispatch),
-     ("indexed capability selection after Refl",property indexedDispatch)]
+     ("indexed capability selection after Refl",property indexedDispatch)])
   unless (all isSuccess results) exitFailure

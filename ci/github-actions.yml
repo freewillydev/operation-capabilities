@@ -25,5 +25,7 @@ jobs:
       - run: cabal run operation-capabilities-example
       - run: bash test/check-capabilities.sh
         shell: bash
+      - run: bash test/check-flow.sh
+        shell: bash
       - run: cabal haddock all
       - run: cabal sdist

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3.0
+
+- Add deferred heterogeneous-state Flow with Pure, Step, Bind and Branch.
+- Add a rank-n interpreter and QualifiedDo operators for runtime-dependent
+  continuations; add an optional RebindableSyntax prelude for state-based if.
+- Keep Operation, capability preparation and indexed dispatch APIs unchanged.
+- Add compiling Operation examples, runtime properties and type rejection tests.
+
 ## 0.1.2.0
 
 - Add kind-polymorphic indexed requests selecting only declared capabilities.
