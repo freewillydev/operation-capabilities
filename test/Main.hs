@@ -4,10 +4,13 @@ module Main where
 
 import Control.Monad (unless)
 import Control.Operation
+import Control.Operation.Severity
 import Control.Operation.Validation
 import Control.Operation.Indexed
 import GHC.TypeLits (Nat, Symbol)
 import Type.Reflection (TypeRep, typeRep)
+import qualified SeverityTypes as S
+import Control.Exception (evaluate)
 import Data.Char (toUpper)
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef')
 import Data.Proxy (Proxy(..))
@@ -66,13 +69,14 @@ indexedDispatch n delta = ioProperty $ do
       run op rep req = sequence (interpret op (ObserveIndexed rep req))
   changed <- run (SomeOperation value) slot request
   original <- run (SomeOperation value) schema (IndexedRequest schema ())
+  selected <- sequence (interpretRequest value request)
   mismatch <- run (SomeOperation value) schema
     (IndexedRequest slot (error "index mismatch forced input"))
   wrongOp <- run (SomeOperation (error "operation mismatch forced payload" :: Note)) slot
     (error "operation mismatch forced request")
   count <- readIORef calls
-  pure (conjoin [changed === Just (n+delta), original === Just n,
-    mismatch === Nothing, wrongOp === Nothing, count === 2])
+  pure (conjoin [changed === Just (n+delta), original === Just n, selected === changed,
+    mismatch === Nothing, wrongOp === Nothing, count === 3])
 
 newtype Positive = Positive Integer
 instance Validation Positive where
@@ -165,11 +169,35 @@ complexDispatch n = conjoin
      Just (Left "Payment must be positive"),
    interpret (SomeOperation (error "mismatched payload forced" :: Note)) PlanPayment === Nothing]
 
+severityDispatch :: Integer -> Property
+severityDispatch n = ioProperty $ do
+  calls <- newIORef (0 :: Int)
+  packed <- evaluate (S.criticalOperation (modifyIORef' calls (+1) >> pure n))
+  before <- readIORef calls
+  resolved <- evaluate (resolveOperation packed)
+  after <- readIORef calls
+  value <- case resolved of
+    Just (S.WriteValue action) -> action
+    Nothing -> fail "critical dispatch mismatch"
+  final <- readIORef calls
+  let safe = case resolveOperation (S.safeOperation n) of
+        Just (S.ReadValue result) -> result == n
+        Nothing -> False
+      mismatched = case interpret (SomeOperation (S.WriteNumber (pure n))) S.ReadingDSL of
+        Nothing -> True
+        Just _ -> False
+  let rejected = case resolveOperation (prepareOperation S.rejectDSL (prepare (S.ReadNumber n))) of
+        Nothing -> True
+        Just _ -> False
+  pure $ conjoin [property safe, property mismatched, property rejected, before === 0,
+                  after === 0, value === n, final === 1]
+
 main :: IO ()
 main = do
   results <- mapM (\(name,prop) -> putStrLn name >> quickCheckWithResult
     stdArgs {maxSuccess = 10000, replay = Just (mkQCGen 20261009, 0)} prop)
-    [("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
+    [("severity-indexed pure preparation and deferred effects",property severityDispatch),
+     ("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
      ("all payload/constructor pairs",property dispatchMatrix), ("lazy mismatches",lazyMismatch),
      ("explicit capability restriction/restoration and deferred effects",property deferredEffects),
      ("pipeline identity and composition",property composition),

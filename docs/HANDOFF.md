@@ -1,6 +1,6 @@
 # Adoption handoff
 
-Use https://github.com/freewillydev/operation-capabilities at tag `v0.1.0.0`
+Use https://github.com/freewillydev/operation-capabilities at tag `v0.1.1.0`
 (or pin its full commit SHA) as a Cabal dependency. The package requires GHC 9.6
 or newer and depends only on `base`. Read the README and `examples/Demo.hs` first.
 
@@ -42,3 +42,12 @@ changes. A passing upstream library build does not qualify a new integration.
 The repository includes `ci/github-actions.yml` as an inactive template because
 the publishing credential lacked workflow permission. Hosted cross-platform CI
 has not run; do not claim it has. An authorized maintainer must activate it.
+
+The optional `Control.Operation.Severity` module provides the opaque, nominal
+`SomeOperationAt program caller severity result` carrier. Pack a selected DSL with
+`prepareOperation`, which requires its outcome to match those indices. Resolve
+explicitly with `resolveOperation`; retain payload equality in the Operation
+instance and application-owned safe/critical evaluators and runtime authorization.
+No local existential/newtype is needed just to partially apply the carrier.
+The original capability pipeline API is unchanged; the separate indexed-pipeline
+branch is not incorporated into this release.

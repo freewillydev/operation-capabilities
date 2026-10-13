@@ -30,3 +30,27 @@ for variant in MISSING DUPLICATE CONFLICT EXTRA_DUPLICATE ARBITRARY RESTRICTED R
     fi
     printf 'PASS %s rejected for the expected type error\n' "$variant"
 done
+
+compile_severity() {
+    "${GHC:-ghc}" -v0 -fno-code -fforce-recomp -Wall -Werror -no-user-package-db -package-env - \
+        -hide-all-packages -package base -i"$root/src" -odir "$work" -hidir "$work" \
+        "$root/test/SeverityTypes.hs" "$@"
+}
+compile_severity
+printf 'PASS indexed existential and partially applied carrier\n'
+for variant in WRONG_CALLER WRONG_SEVERITY WRONG_RESULT WRONG_PROGRAM COERCE_CALLER COERCE_SEVERITY COERCE_RESULT COERCE_PROGRAM PRIVATE_SCOPED WRONG_DSL HIDDEN_SELECTOR; do
+    if compile_severity "-D$variant" > "$work/$variant.log" 2>&1; then
+        printf 'FAIL %s unexpectedly compiled\n' "$variant" >&2
+        exit 1
+    fi
+    case "$variant" in
+        PRIVATE_SCOPED) expected='Data constructor not in scope' ;;
+        HIDDEN_SELECTOR) expected='Could not deduce.*Reading' ;;
+        *) expected="Couldn't match" ;;
+    esac
+    if ! grep -Eq "$expected" "$work/$variant.log"; then
+        cat "$work/$variant.log" >&2
+        exit 1
+    fi
+    printf 'PASS %s rejected for the expected type error\n' "$variant"
+done
