@@ -18,6 +18,10 @@ import GHC.TypeLits (ErrorMessage(..), TypeError)
 -- | Each payload determines one duplicate-free list of capability classes.
 -- Implement interpreters by matching the DSL constructor, proving payload-type
 -- equality, and calling that constructor's specific class methods.
+-- For a whole-workflow operation, construct its deferred @Flow@ / @F.do@ in
+-- 'interpret' after payload equality, and return it in 'Outcome' for a separate
+-- application evaluator. Interpreting leaf steps alone does not establish this
+-- workflow boundary. Equality proves type identity, not runtime authorization.
 class (Typeable op, Typeable (Context op), UniqueCapabilities caps)
     => Operation op (caps :: [Type -> Constraint]) | op -> caps where
   type Context op = (ctx :: Constraint) | ctx -> op -- ^ Constructor-specific constraint.
