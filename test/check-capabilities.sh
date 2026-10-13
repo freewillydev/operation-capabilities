@@ -10,16 +10,16 @@ compile() {
 }
 compile
 printf 'PASS inferred capability list, existential dictionaries, unchanged interpret\n'
-for variant in MISSING DUPLICATE CONFLICT EXTRA_DUPLICATE ARBITRARY RESTRICTED RESTRICT_EXPANDS EXPAND_RESTRICTS COERCE_VIEW PRIVATE_CONSTRUCTOR; do
+for variant in MISSING DUPLICATE CONFLICT EXTRA_DUPLICATE ARBITRARY RESTRICTED RESTRICT_EXPANDS EXPAND_RESTRICTS COERCE_VIEW PRIVATE_CONSTRUCTOR INDEX_ARBITRARY INDEX_DUPLICATE; do
     if compile "-D$variant" > "$work/$variant.log" 2>&1; then
         printf 'FAIL %s unexpectedly compiled\n' "$variant" >&2
         exit 1
     fi
     case "$variant" in
         MISSING) expected='No instance for.*Named Request' ;;
-        DUPLICATE|EXTRA_DUPLICATE) expected='Duplicate operation capability' ;;
+        DUPLICATE|EXTRA_DUPLICATE|INDEX_DUPLICATE) expected='Duplicate operation capability' ;;
         CONFLICT) expected='Functional dependencies conflict' ;;
-        ARBITRARY|RESTRICT_EXPANDS|EXPAND_RESTRICTS) expected='No instance for' ;;
+        ARBITRARY|RESTRICT_EXPANDS|EXPAND_RESTRICTS|INDEX_ARBITRARY) expected='No instance for' ;;
         RESTRICTED) expected='Could not deduce.*Named' ;;
         COERCE_VIEW) expected="Couldn't match type" ;;
         PRIVATE_CONSTRUCTOR) expected='Data constructor not in scope' ;;

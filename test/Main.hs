@@ -1,15 +1,19 @@
 {-# LANGUAGE ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses, ScopedTypeVariables, TypeApplications, TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses, ScopedTypeVariables, TypeApplications, TypeFamilies, KindSignatures, PolyKinds #-}
 module Main where
 
 import Control.Monad (unless)
 import Control.Operation
 import Control.Operation.Validation
+import Control.Operation.Indexed
+import GHC.TypeLits (Nat, Symbol)
+import Type.Reflection (TypeRep, typeRep)
 import Data.Char (toUpper)
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef')
 import Data.Proxy (Proxy(..))
 import Data.Typeable (eqT, (:~:)(Refl))
 import Demo
+import Planning
 import System.Exit (exitFailure)
 import Test.QuickCheck hiding (Positive)
 import Test.QuickCheck.Random (mkQCGen)
@@ -29,10 +33,46 @@ instance Operation Counter CounterCaps where
   type Outcome Counter = IO Integer
   data DSL Counter where
     Observe :: Context Counter => DSL Counter
+    ObserveIndexed :: (IndexOutput index ~ IO Integer) => TypeRep index
+      -> IndexedRequest CounterCaps (IO Integer) -> DSL Counter
   interpret (SomeOperation (value :: actual)) Observe =
     case eqT @actual @Counter of
       Just Refl -> Just (observe value)
       Nothing -> Nothing
+  interpret (SomeOperation (value :: actual)) (ObserveIndexed expected request) =
+    case eqT @actual @Counter of
+      Just Refl -> interpretIndexed expected value request
+      Nothing -> Nothing
+
+instance IndexedCapability (24 :: Nat) where
+  type IndexCaps 24 = '[Adjustable, Observed]
+  type IndexInput 24 = Integer
+  type IndexOutput 24 = IO Integer
+  runIndexed _ value delta = observe (adjust (+delta) value)
+
+instance IndexedCapability ("read" :: Symbol) where
+  type IndexCaps "read" = '[Observed]
+  type IndexInput "read" = ()
+  type IndexOutput "read" = IO Integer
+  runIndexed _ value () = observe value
+
+indexedDispatch :: Integer -> Integer -> Property
+indexedDispatch n delta = ioProperty $ do
+  calls <- newIORef 0
+  let value = Counter n calls
+      slot = typeRep @(24 :: Nat)
+      schema = typeRep @("read" :: Symbol)
+      request = IndexedRequest slot delta
+      run op rep req = sequence (interpret op (ObserveIndexed rep req))
+  changed <- run (SomeOperation value) slot request
+  original <- run (SomeOperation value) schema (IndexedRequest schema ())
+  mismatch <- run (SomeOperation value) schema
+    (IndexedRequest slot (error "index mismatch forced input"))
+  wrongOp <- run (SomeOperation (error "operation mismatch forced payload" :: Note)) slot
+    (error "operation mismatch forced request")
+  count <- readIORef calls
+  pure (conjoin [changed === Just (n+delta), original === Just n,
+    mismatch === Nothing, wrongOp === Nothing, count === 2])
 
 newtype Positive = Positive Integer
 instance Validation Positive where
@@ -115,6 +155,16 @@ shortCircuit n = ioProperty $ do
   count <- readIORef calls
   pure $ conjoin [message === "rejected", count === 0]
 
+-- The rejected branch must not demand the later fee calculation or builder.
+complexDispatch :: Integer -> Property
+complexDispatch n = conjoin
+  [interpret (SomeOperation (Payment (abs n + 2) 1 1)) PlanPayment === Just (Right (UnsignedTx 1 1)),
+   interpret (SomeOperation (Payment 0 1 0)) PlanPayment === Just (Left "Insufficient funds"),
+   interpret (SomeOperation (Payment 1 1 (-1))) PlanPayment === Just (Left "Invalid fee estimate"),
+   interpret (SomeOperation (Payment 0 0 (error "fee forced after rejection"))) PlanPayment ===
+     Just (Left "Payment must be positive"),
+   interpret (SomeOperation (error "mismatched payload forced" :: Note)) PlanPayment === Nothing]
+
 main :: IO ()
 main = do
   results <- mapM (\(name,prop) -> putStrLn name >> quickCheckWithResult
@@ -123,5 +173,7 @@ main = do
      ("all payload/constructor pairs",property dispatchMatrix), ("lazy mismatches",lazyMismatch),
      ("explicit capability restriction/restoration and deferred effects",property deferredEffects),
      ("pipeline identity and composition",property composition),
-     ("rejection short-circuiting without interpretation",property shortCircuit)]
+     ("rejection short-circuiting without interpretation",property shortCircuit),
+     ("multi-capability interpretation after Refl",property complexDispatch),
+     ("indexed capability selection after Refl",property indexedDispatch)]
   unless (all isSuccess results) exitFailure

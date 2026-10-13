@@ -81,6 +81,53 @@ This excerpt uses the definitions and language extensions in `examples/Demo.hs`.
 Do not compare constraint types or use unchecked casts. `Nothing` denotes a
 payload mismatch; represent domain validation failures in `Outcome` instead.
 
+## Complex behavior after Refl
+
+`Just Refl` is not limited to a single method call. Once the payload types are
+equal, combine methods from the constructor's specific classes, branch on their
+results, and return a domain outcome. Keep reusable orchestration in a function
+constrained by only the capabilities it needs:
+
+```haskell
+planPayment :: (FeeModel op, SpendPolicy op) => op -> Either String UnsignedTx
+planPayment value
+  | amount <= 0 = Left "Payment must be positive"
+  | fee < 0 = Left "Invalid fee estimate"
+  | amount + fee > availableFunds value = Left "Insufficient funds"
+  | otherwise = buildUnsigned value fee
+  where
+    amount = paymentAmount value
+    fee = estimateFee value
+
+instance Operation Payment '[FeeModel, SpendPolicy] where
+  type Context Payment = (FeeModel Payment, SpendPolicy Payment)
+  type Outcome Payment = Either String UnsignedTx
+  data DSL Payment where
+    PlanPayment :: Context Payment => DSL Payment
+  interpret (SomeOperation (value :: actual)) PlanPayment =
+    case eqT @actual @Payment of
+      Just Refl -> Just (planPayment value)
+      Nothing -> Nothing
+```
+
+The complete, compiled example is [examples/Planning.hs](examples/Planning.hs).
+Its classes supply fee estimation, funds/amount access, and unsigned construction;
+concrete instances supply the implementation. The helper needs neither `Operation`
+nor `Typeable`. Other payloads can reuse it through their own class instances.
+
+`Nothing` means a payload mismatch; `Just (Left message)` means the type matched
+but domain checks failed; `Just (Right tx)` means planning succeeded. This example
+neither signs nor broadcasts. Preserve validation order and short-circuit behavior
+when extracting helpers, especially before parsing, effects, or partial operations.
+For effects, make them explicit in `Outcome` (for example `IO (Either Error Tx)`);
+matching `Refl` itself does not execute an IO action. Never return borrowed FFI
+data or deferred actions beyond their valid lifetime.
+
+Do not add every concrete behavior to `Operation`, compare capability lists with
+`eqT`, or expand the generic `Validation` class into a domain-specific API.
+The operation handles dispatch; capability functions compose behavior; instances
+implement it. Pure rules that only need `validate` should keep the simpler adapter.
+
 ## Pipelines have explicit capability views
 
 `SomeOperationWith declared visible` hides the concrete payload and retains its
@@ -163,7 +210,7 @@ cabal haddock all
 cabal sdist
 ```
 
-Runtime tests run seven QuickCheck properties, 10,000 cases each, using seed
+Runtime tests run nine QuickCheck properties, 10,000 cases each, using seed
 20261009. They cover the example, generic validation, all sample dispatch pairs,
 lazy mismatch rejection, deferred effects, restriction/restoration, composition,
 identity, and rejection short-circuiting.
@@ -184,3 +231,44 @@ actual workflow results before claiming those platforms have passed.
 See [docs/HANDOFF.md](docs/HANDOFF.md) for a concise adoption message for another
 chat, and [NOTICE](NOTICE) for provenance. No Elements node, wallet, network,
 credentials, or FFI runtime are required.
+
+## Indexed capability requests after Refl
+
+`Control.Operation.Indexed` adds a kind-polymorphic `IndexedCapability index`
+class without changing `Operation`, `interpret`, or the existing pipelines.
+Its associated `IndexCaps index` selects a list of capability classes;
+`Capabilities (IndexCaps index) op` is the resulting constraint on the payload.
+`IndexInput` and `IndexOutput` give each index its own input and result types.
+
+An `IndexedRequest declared result` carries a `TypeRep index`, its typed input,
+the indexed capability instance, and proofs that its selected capabilities are
+unique and a subset of `declared`. It cannot add an unrelated class to an
+operation's declared capabilities, even if an instance happens to exist.
+
+Call the helper only after matching the operation payload:
+
+```haskell
+interpret (SomeOperation (value :: actual)) (ObserveIndexed expected request) =
+  case eqT @actual @Counter of
+    Nothing -> Nothing
+    Just Refl -> interpretIndexed expected value request
+```
+
+The helper matches the request GADT and compares independently kinded index
+representations with `eqTypeRep`. After `HRefl`, it explicitly restricts the
+capability view to `IndexCaps index` and invokes `runIndexed` with that view.
+A mismatch returns `Nothing` without evaluating request input or running its
+effects. An `IO` result remains deferred until the caller executes it. Domain
+errors belong in `IndexOutput`, not in dispatch's `Nothing`.
+
+The runnable test in `test/Main.hs` uses index `24 :: Nat` to select
+`'[Adjustable, Observed]`, adjust a counter, then observe it. Index
+`"read" :: Symbol` selects only `'[Observed]`. The same interpreter handles both;
+cross-kind mismatches are rejected before touching an undefined input. Type
+tests reject undeclared and duplicate indexed capabilities.
+
+The request checks identity and dictionary availability, not data validity or
+authorization. Hide validated-data constructors where runtime validation is
+required. Injectivity is not imposed: several indices may legitimately select
+the same capabilities or result type. Capability visibility retains the core
+library's API-discipline guarantees, not a security-sandbox guarantee.

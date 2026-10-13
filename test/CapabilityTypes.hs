@@ -1,15 +1,35 @@
 {-# LANGUAGE CPP, ConstraintKinds, DataKinds, FlexibleContexts, GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses, TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeFamilies, TypeApplications #-}
 -- Compile the positive case and intentionally ill-typed variants separately.
 module CapabilityTypes where
 
 import Data.Proxy (Proxy(..))
 import Control.Operation
+import Control.Operation.Indexed
+import Type.Reflection (typeRep)
 #ifdef COERCE_VIEW
 import Data.Coerce (coerce)
 #endif
 
 data Request = Request
+data NameIndex
+instance IndexedCapability NameIndex where
+#ifdef INDEX_DUPLICATE
+  type IndexCaps NameIndex = '[Named, Named]
+#else
+  type IndexCaps NameIndex = '[Named]
+#endif
+  type IndexInput NameIndex = ()
+  type IndexOutput NameIndex = String
+  runIndexed _ value () = name value
+
+#ifdef INDEX_ARBITRARY
+indexed :: IndexedRequest '[] String
+#else
+indexed :: IndexedRequest '[Named] String
+#endif
+indexed = IndexedRequest (typeRep @NameIndex) ()
+
 class Named op where
   name :: op -> String
 #ifndef MISSING
