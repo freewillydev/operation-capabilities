@@ -30,11 +30,11 @@ To use the package from another Cabal project, add this to `cabal.project`:
 source-repository-package
   type: git
   location: https://github.com/freewillydev/operation-capabilities.git
-  tag: 86c5b86078bc6fe9b9130a28d9de600a339f6221
+  tag: 6ac223dd3ca81b0e3f7c2c4f355075de1bb56e1f
 ```
 
-Then add `operation-capabilities ==0.1.3.0` to the component's `build-depends`.
-The full commit SHA pins the version that includes Flow; `v0.1.1.0` predates it.
+Then add `operation-capabilities ==0.1.4.0` to the component's `build-depends`.
+The full commit SHA includes Flow, variable outputs, and existential output capabilities.
 The implementation is in `Control.Operation`; the optional generic rule adapter
 is in `Control.Operation.Validation`.
 

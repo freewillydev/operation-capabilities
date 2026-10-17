@@ -1,8 +1,8 @@
 # Adoption handoff
 
-Use https://github.com/freewillydev/operation-capabilities version `0.1.3.0` at
-commit `86c5b86078bc6fe9b9130a28d9de600a339f6221` as a Cabal dependency; this
-includes Flow, which `v0.1.1.0` does not. The package requires GHC 9.6
+Use https://github.com/freewillydev/operation-capabilities version `0.1.4.0` at
+commit `6ac223dd3ca81b0e3f7c2c4f355075de1bb56e1f` as a Cabal dependency; this
+includes Flow and existential output capabilities. The package requires GHC 9.6
 or newer and depends only on `base`. Read the README and `examples/Demo.hs` first.
 
 Preserve these design requirements:
