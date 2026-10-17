@@ -20,22 +20,31 @@ flowProperties =
    ("flow effects are deferred, ordered, and repeatable",property effects)]
   where
     qualified :: NonNegative Integer -> Property
-    qualified (NonNegative n) = execute (Account n) (RunPayment (n :& VNil) payment)
-      === Right (n-if n > 100 then 2 else 1)
+    qualified (NonNegative n) = case payment (Account n) of
+      Nothing -> counterexample "whole payment operation failed to compile" False
+      Just program -> runPayment (Account n) (n :& VNil) program
+        === Right (n-if n > 100 then 2 else 1)
     rebound :: NonNegative Integer -> Property
-    rebound (NonNegative n) = execute (Account n) (RunPayment (n :& VNil) R.payment)
+    rebound (NonNegative n) = runPayment (Account n) (n :& VNil) R.payment
       === Right (n-if n > 100 then n `div` 100 else 1)
 
 lazyFailures :: Property
 lazyFailures = once $ conjoin
-  [execute (Account 0) (RunPayment (1 :& VNil)
-     (F.Bind (F.Step VerifyAmount) (error "failed step forced continuation"))) === Left "invalid amount",
-   execute (Account 10) (RunPayment (2 :& VNil) (F.Branch (const True) payment
-     (error "unselected branch forced"))) === Right 1,
-   execute (Account 10) (RunPayment (2 :& VNil) (F.Branch (const False)
-     (error "unselected branch forced") payment)) === Right 1,
-   interpret (SomeOperation (error "payload forced" :: Note))
-     (error "mismatched DSL forced" :: DSL Account) === Nothing]
+  [runPayment (Account 0) (1 :& VNil)
+     (F.Bind (F.Step VerifyAmount) (error "failed step forced continuation")) === Left "invalid amount",
+   runPayment (Account 10) (2 :& VNil) (F.Branch (const True) planned
+     (error "unselected branch forced")) === Right 1,
+   runPayment (Account 10) (2 :& VNil) (F.Branch (const False)
+     (error "unselected branch forced") planned) === Right 1,
+   property $ case payment (error "compilation evaluated account") of
+     Nothing -> False
+     Just program -> program `seq` True,
+   property $ case interpret (SomeOperation (error "payload forced" :: Note))
+     (error "mismatched DSL forced" :: DSL Account) of
+       Nothing -> True
+       Just _ -> False]
+  where
+    planned = execute (Account 10) PlanPayment
 
 composition :: Integer -> Property
 composition n =

@@ -1,7 +1,8 @@
 # Adoption handoff
 
-Use https://github.com/freewillydev/operation-capabilities at tag `v0.1.1.0`
-(or pin its full commit SHA) as a Cabal dependency. The package requires GHC 9.6
+Use https://github.com/freewillydev/operation-capabilities version `0.1.3.0` at
+commit `86c5b86078bc6fe9b9130a28d9de600a339f6221` as a Cabal dependency; this
+includes Flow, which `v0.1.1.0` does not. The package requires GHC 9.6
 or newer and depends only on `base`. Read the README and `examples/Demo.hs` first.
 
 Preserve these design requirements:
@@ -33,6 +34,14 @@ Preserve these design requirements:
 9. Retain runtime and compile-negative tests. Run `cabal test all` and
    `bash test/check-capabilities.sh`, and add tests for the destination project's
    domain behavior rather than assuming the library tests cover it.
+10. **Design whole-workflow operations around `interpret`: construct their
+    `F.do` after payload `eqT`/`Refl`, and return the deferred Flow or a closed
+    application program containing it.** Do not move the complete sequence
+    outside `interpret` and call only its leaf instructions interpreted. Runtime
+    results choose continuations during evaluation. Keep effects, authorization,
+    financial checks and replay protection at the application's evaluator;
+    compilation and equality evidence do not perform or authorize them. See
+    `examples/FlowExample.hs` for separate compilation and evaluation.
 
 Do not copy Elements-specific business logic, FFI code, configuration, or secrets.
 Prefer depending on this package to maintaining divergent copied frameworks.

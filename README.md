@@ -7,6 +7,10 @@ make changes to the visible subset explicit and statically checked.
 The library depends only on `base`. QuickCheck is a test-only dependency.
 Tested with GHC 9.6.7; the severity extension is verified with GHC 9.14.1. MIT licensed. This package is not yet published to Hackage.
 
+**Workflow design:** construct the complete `F.do` in `interpret`, after
+`eqT`/`Refl`, and evaluate it separately. This is an important integration
+boundary; see [Value-dependent workflows](#value-dependent-workflows).
+
 ## Get started
 
 ```sh
@@ -26,11 +30,11 @@ To use the package from another Cabal project, add this to `cabal.project`:
 source-repository-package
   type: git
   location: https://github.com/freewillydev/operation-capabilities.git
-  tag: v0.1.1.0
+  tag: 86c5b86078bc6fe9b9130a28d9de600a339f6221
 ```
 
-Then add `operation-capabilities ==0.1.1.0` to the component's `build-depends`.
-For an immutable dependency, replace the tag with its resolved full commit SHA.
+Then add `operation-capabilities ==0.1.3.0` to the component's `build-depends`.
+The full commit SHA pins the version that includes Flow; `v0.1.1.0` predates it.
 The implementation is in `Control.Operation`; the optional generic rule adapter
 is in `Control.Operation.Validation`.
 
@@ -313,6 +317,13 @@ for a complete compiling example and rejection tests.
 
 ## Value-dependent workflows
 
+**Important design rule:** when an operation represents a complete workflow,
+construct that workflow's `F.do` inside its `interpret`, after successful payload
+`eqT`/`Refl`. Return the deferred program as `Outcome`; let the application's
+evaluator execute it. Keep this boundary explicit when designing or refactoring
+an integration. Interpreting individual steps is useful, but does not replace
+interpreting the operation that selects their complete sequence and branches.
+
 `Control.Operation.Flow` is an optional interpreter layer, separate from the
 existing capability preparation `Pipeline`. It does not replace `Operation` or
 change `interpret`. Its type is `Flow instruction before after result`, where
@@ -328,16 +339,27 @@ is a separate runtime value returned to a continuation.
 labels, these indices describe values that the interpreter actually threads.
 Both branches must agree on their resulting state list and returned value type.
 
-With `QualifiedDo`, only the named block uses the flow operators:
+With `QualifiedDo`, only the named block uses the flow operators. In the complete
+example, the operation's DSL requests a payment plan rather than accepting an
+arbitrary caller-built sequence:
 
 ```haskell
 {-# LANGUAGE QualifiedDo #-}
 import qualified Control.Operation.Flow as F
 
-payment = F.do
-  amount <- F.step VerifyAmount
-  let fee = if amount > 100 then 2 else 1
-  F.step (SettleAmount fee)
+instance Operation Account '[Verify, Settle] where
+  type Context Account = (Verify Account, Settle Account)
+  type Outcome Account = F.Flow (Action Account) '[Integer] '[] Integer
+  data DSL Account where
+    PlanPayment :: Context Account => DSL Account
+  interpret (SomeOperation (_value :: actual)) request =
+    case eqT @actual @Account of
+      Nothing -> Nothing
+      Just Refl -> case request of
+        PlanPayment -> Just $ F.do
+          amount <- F.step VerifyAmount
+          let fee = if amount > 100 then 2 else 1
+          F.step (SettleAmount fee)
 ```
 
 The fee is computed after `VerifyAmount` returns, not while assembling the
@@ -345,8 +367,21 @@ program. This uses ordinary Haskell `if` on the returned value. Instructions
 and dictionaries come from the application; Flow does not discover or grant
 additional capabilities. See [examples/FlowExample.hs](examples/FlowExample.hs)
 for the full action GADT, capability instances and `Operation` integration.
-That interpreter proves payload equality before inspecting its DSL, then calls
-`runFlow`; its instruction handler matches the GADT to obtain method dictionaries.
+Its `payment` helper only dispatches to `interpret`; the separate `runPayment`
+evaluator calls `runFlow` and matches instructions to obtain method dictionaries.
+This example evaluates in pure `Either`. For effectful applications, return a
+Flow or a closed safe/critical program containing it and evaluate IO only at the
+application's controlled boundary. Building or resolving a workflow must not
+read a database, sign, send, or perform other effects. Runtime-dependent decisions
+remain in `Bind` continuations or `Branch`; they run when their inputs are
+available, not during initial construction. A separate interpreter for leaf
+instructions may compile them into deferred actions at that boundary.
+
+Payload equality proves type identity, not authorization or valid payment data.
+Keep authentication, locks, financial checks, journaling and replay protection
+in the evaluator and its concrete operations. This is an application design
+discipline: the generic library does not enforce a particular evaluator or make
+arbitrary capability instances safe.
 For runtime schema selection, retain `IndexedRequest` and its declared-capability
 checks before executing the selected workflow.
 
@@ -380,7 +415,8 @@ chains. Construction stores instructions and functions without interpreting
 them; arbitrary bottoms in caller expressions still follow Haskell evaluation
 rules. Re-running an effectful Flow re-runs its effects.
 
-Validation: `cabal test` exercises both syntax styles and Operation dispatch;
+Validation: `cabal test` exercises both syntax styles, whole-workflow Operation
+dispatch, mismatch laziness and separate evaluation;
 `bash test/check-flow.sh` checks valid programs and rejects bad state transitions,
 branch outputs, returned values and missing instruction capabilities.
 

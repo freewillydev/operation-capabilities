@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, FlexibleInstances, GADTs, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs, MultiParamTypeClasses #-}
 {-# LANGUAGE QualifiedDo, ScopedTypeVariables, TypeApplications, TypeFamilies, TypeOperators #-}
 module FlowExample where
 
@@ -34,20 +34,23 @@ runAction op action values = case action of
   SettleAmount fee -> case values of
     verified :& VNil -> settle op verified fee >>= \paid -> Right (paid, VNil)
 
-payment :: Flow (Action Account) '[Integer] '[] Integer
-payment = F.do
-  amount <- F.step VerifyAmount
-  let fee = if amount > 100 then 2 else 1
-  paid <- F.step (SettleAmount fee)
-  F.pure paid
-
 instance Operation Account '[Verify, Settle] where
-  type Context Account = Verify Account
-  type Outcome Account = Either String Integer
+  type Context Account = (Verify Account, Settle Account)
+  type Outcome Account = Flow (Action Account) '[Integer] '[] Integer
   data DSL Account where
-    RunPayment :: Values xs -> Flow (Action Account) xs '[] Integer -> DSL Account
-  interpret (SomeOperation (value :: actual)) request =
+    PlanPayment :: Context Account => DSL Account
+  interpret (SomeOperation (_value :: actual)) request =
     case eqT @actual @Account of
       Nothing -> Nothing
       Just Refl -> case request of
-        RunPayment values program -> Just (fst <$> F.runFlow (runAction value) program values)
+        PlanPayment -> Just $ F.do
+          amount <- F.step VerifyAmount
+          let fee = if amount > 100 then 2 else 1
+          F.step (SettleAmount fee)
+
+-- Compilation is pure; the application chooses when and how to evaluate it.
+payment :: Account -> Maybe (Flow (Action Account) '[Integer] '[] Integer)
+payment value = interpret (SomeOperation value) PlanPayment
+
+runPayment :: Account -> Values xs -> Flow (Action Account) xs '[] Integer -> Either String Integer
+runPayment value values program = fst <$> F.runFlow (runAction value) program values
