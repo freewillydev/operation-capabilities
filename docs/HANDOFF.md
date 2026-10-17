@@ -51,3 +51,25 @@ instance and application-owned safe/critical evaluators and runtime authorizatio
 No local existential/newtype is needed just to partially apply the carrier.
 The original capability pipeline API is unchanged; the separate indexed-pipeline
 branch is not incorporated into this release.
+
+For a variable number of heterogeneous results, use `Control.Operation.Outputs`
+rather than an untyped list or a fixed tuple. Define an `OutputSchema` with an
+associated `OutputCapability`; prove unknown payload equality before returning
+its `OutputDict`. Use the optional `OutputRendering` associated result for pure
+rendering, or `withOutputs`/`foldOutputsM` for domain-specific effects. Keep request
+preparation on the existing Restrict/Preserve/Expand pipeline. The complete schema
+is resolved before values are inspected; rejection does not run prefix effects.
+Use the equality-constrained append/composition functions rather than casts.
+The runnable `VariableOutputs` example and output type/property tests are part of
+the package. See README's variable output schemas section for semantics and limits.
+
+For outputs that each carry a hidden payload and their own methods, use
+`CapabilityOutput`/`SomeCapabilityOutput`. The carried `SomeOperationWith` view
+is selected by `IndexCaps`; capability parameters may have different kinds.
+`withMatchingIndex` grants `(actual ~~ selected)` only after `eqTypeRep` succeeds,
+transporting the carried index class and its associated constraint families.
+`interpretOutput` then invokes `runIndexed` using only visible methods. See
+`CapableOutputs` for a class parameterized by both Symbol and a promoted Slot.
+Use `OutputStream` to keep batches uninterpreted across demand-driven stages.
+Ordinary output-list equality remains homogeneous; do not use `(~~)` just because
+a list contains heterogeneous values. Preserve native callback lifetimes.

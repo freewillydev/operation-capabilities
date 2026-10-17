@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4.0
+
+- Add runtime-variable heterogeneous outputs with a retained type-level spine.
+- Resolve registered output dictionaries through OutputSchema and its associated
+  OutputCapability; provide optional OutputRendering with an associated result.
+- Check the complete schema before inspecting values, then fold effects in order.
+- Add equality-constrained append/composition and a capability-restricted example.
+- Add runtime properties and compile-time rejection tests for output schemas.
+- Add existential CapabilityOutput values using the existing capability views;
+  transport poly-kinded index dictionaries through heterogeneous equality.
+- Add registered IndexMatch/discoverRequest helpers and deferred pull streams.
+- Keep homogeneous output-list equality simple and preserve Operation.interpret.
+
 ## 0.1.3.0
 
 - Add deferred heterogeneous-state Flow with Pure, Step, Bind and Branch.

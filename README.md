@@ -383,3 +383,126 @@ rules. Re-running an effectful Flow re-runs its effects.
 Validation: `cabal test` exercises both syntax styles and Operation dispatch;
 `bash test/check-flow.sh` checks valid programs and rejects bad state transitions,
 branch outputs, returned values and missing instruction capabilities.
+
+## Variable output schemas
+
+`Control.Operation.Outputs` handles runtime-variable numbers and types of outputs,
+not a fixed tuple. `SomeOutputs` packages an existential `OutputTypes xs` spine
+beside the existing `Values xs`. `emptyOutputs` and `consOutput` build zero or
+many mixed outputs while retaining each element's type. Repeated types are valid;
+the uniqueness rule for operation capability lists does not apply to data values.
+
+An `OutputSchema schema` instance selects an associated `OutputCapability schema`
+and implements `resolveOutput`. Match each unknown payload type with `eqT` and
+return `OutputDict` only after `Just Refl` establishes a registered type whose
+instance is actually in scope. Type equality does not synthesize dictionaries.
+An instance existing somewhere is not registration in a particular schema.
+
+`resolveOutputs` resolves the entire type spine before inspecting the value spine
+or invoking any output methods. It returns `Nothing` for an unsupported type,
+including one after an otherwise valid prefix. A successful existential package
+can be consumed with `withOutputs`; its handler works for any list length.
+`foldOutputsM` recovers each class dictionary by matching its internal GADT and
+applies the class methods in order. Failure semantics come from the selected
+monad; `Either`/`ExceptT` stop before later values or effects. There is no rollback.
+
+For pure rendering, `OutputRendering schema` supplies `RenderedOutput schema` and
+`renderOne`. Its default `render` resolves the schema and maps the recovered
+methods. Other consumers can use `mapOutputs` or `foldOutputsM` without a rendering
+instance. See [examples/VariableOutputs.hs](examples/VariableOutputs.hs):
+
+```haskell
+runRequest (Request [])
+-- Right []
+runRequest (Request [Left 5, Right "received", Left 12])
+-- Right ["5 sats", "received", "12 sats"]
+```
+
+That example prepares a request with `Restrict '[Inspect]`, validates through
+`Preserve`, uses `Expand` to restore declared capabilities, then restricts to
+`'[Produce]` before producing outputs. These are the existing preparation tools,
+not another capability system. Request visibility and output-schema selection
+are separate: neither automatically grants the other's dictionaries. As with
+the existing pipeline, this is a typed API discipline, not a security sandbox.
+
+`appendOutputs` uses `Append xs ys ~ zs` to retain concatenated output indices.
+`composeOutputs` shares its intermediate type variable, so consecutive checked
+transformations must agree on their entire intermediate list. These lists have
+kind `[Type]`, so heterogeneous equality would add nothing here. At runtime the
+schemas use `eqT`/`Refl`. Do not replace a meaningful domain record with a
+heterogeneous list merely because it has several fields.
+
+`OutputInterpreter` mirrors `Operation.interpret`: an associated `OutputDSL`
+GADT selects an action and result, while `interpretOutputs` accepts an existential
+batch. Match the request, resolve the entire schema, and then call the recovered
+methods. `Nothing` means a schema mismatch; domain failure or IO belongs inside
+the selected result. The original `Operation.interpret` API is unchanged.
+
+### Outputs with their own existential capabilities
+
+Use `CapabilityOutput index` when each output should hide its own payload and
+carry its own capabilities, rather than using one capability for a whole batch.
+It stores the existing `SomeOperationWith declared (IndexCaps index)` envelope.
+Prepare that envelope with the existing `Restrict`/`Preserve`/`Expand` tooling;
+no new mechanism can grant methods outside the payload's declared set.
+`SomeCapabilityOutput` also hides the index and its kind.
+
+The existing poly-kinded `IndexedCapability index` class generates the visible
+constraints through `Capabilities (IndexCaps index) payload`. Its capability
+classes can have additional arguments of different kinds, for example:
+
+```haskell
+class Describe (label :: k) op where
+  describe :: Proxy label -> op -> String
+
+type BalanceCaps = '[Describe "sats", Describe ('Slot 24), Adjust]
+```
+
+Here `"sats" :: Symbol` and `'Slot 24 :: Slot`. Partial application leaves each
+capability with kind `Type -> Constraint`, which the existing capability list
+can carry. In [examples/CapableOutputs.hs](examples/CapableOutputs.hs), the
+`'TextView :: View` index selects `Describe "sats"`, while `'Slot 24 :: Slot`
+selects `Adjust` and `Describe ('Slot 24)`:
+
+```haskell
+textOutput 50 >>= \output -> Right (interpretOutput output (typeRep @'TextView) ())
+-- Right (Just "50 sats")
+slotOutput 50 >>= \output -> Right (interpretOutput output (typeRep @('Slot 24)) 7)
+-- Right (Just "slot 24: 57")
+textOutput 50 >>= \output -> Right (interpretOutput output (typeRep @('Slot 24)) 7)
+-- Right Nothing
+```
+
+`interpretOutput` matches the carried and requested indices using
+`withMatchingIndex`, whose continuation receives `actual ~~ selected`. Unlike
+the output lists, these indices have independently unknown kinds. The equality
+transports the existing `IndexedCapability actual` dictionary and refines its
+associated capability/input/result families. Only then does `withCapabilities`
+expose the carried methods to `runIndexed selected`. Mismatches do not force the
+payload, input, or methods. Equality never manufactures a dictionary.
+
+`IndexMatch`/`matchIndex` expose the same mechanism for registered requests;
+`discoverRequest` recovers the selected class and subset evidence and builds an
+`IndexedRequest`. An instance merely existing elsewhere is not registration.
+
+### Deferred pull streams
+
+`OutputStream m` transports finite `SomeOutputs` batches. Each batch can have a
+different runtime length and types, including `SomeCapabilityOutput` values with
+their own dictionaries. `unfoldOutputs` defines a demand-driven source,
+`throughOutputs` composes preparation stages without selecting a schema, and
+`takeOutputs` bounds the number of pulls. Only a terminal consumer needs to call
+`interpretOutputs`/`interpretOutput`.
+
+`foldStreamM` keeps the accumulator WHNF-strict and stops pulling on monadic
+failure. There is no eager buffer, background thread, automatic retry, rollback,
+or resource ownership. Bracket external handles, keep each batch finite/bounded,
+and avoid retaining old batches in the consumer. Full-schema validation is per
+batch, not over an infinite stream. Native borrowed pointers must never escape
+their callback lifetime merely because the stream is lazy.
+
+`bash test/check-outputs.sh` covers positive typing and rejects wrong sequence
+indices, reversed append results, unavailable methods and hidden capabilities.
+The runtime properties cover variable arity, concatenation, lazy whole-schema
+rejection, ordered short-circuiting, capability preparation, independently kinded
+output dispatch, and a bounded 200,000-batch prefix of an infinite pull source.

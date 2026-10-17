@@ -1,6 +1,6 @@
 cabal-version: 2.4
 name: operation-capabilities
-version: 0.1.3.0
+version: 0.1.4.0
 synopsis: Capability-constrained existential operations and typed pipelines
 description:
   Declare a unique capability list for each operation, preserve class dictionaries
@@ -25,6 +25,8 @@ extra-source-files:
   test/check-capabilities.sh
   test/FlowTypes.hs
   test/check-flow.sh
+  test/OutputTypes.hs
+  test/check-outputs.sh
 
 source-repository head
   type: git
@@ -32,7 +34,7 @@ source-repository head
 
 library
   exposed-modules: Control.Operation, Control.Operation.Validation, Control.Operation.Severity, Control.Operation.Indexed,
-    Control.Operation.Flow, Control.Operation.Flow.Rebindable
+    Control.Operation.Flow, Control.Operation.Flow.Rebindable, Control.Operation.Outputs
   hs-source-dirs: src
   build-depends: base >=4.18 && <5
   default-language: Haskell2010
@@ -49,7 +51,7 @@ executable operation-capabilities-example
 test-suite properties
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: Demo, Planning, SeverityTypes, FlowExample, FlowRebindable, FlowTests
+  other-modules: Demo, Planning, SeverityTypes, FlowExample, FlowRebindable, FlowTests, VariableOutputs, CapableOutputs, OutputTests
   hs-source-dirs: test, examples
   build-depends: base >=4.18 && <5, operation-capabilities, QuickCheck >=2.15 && <2.19
   default-language: Haskell2010

@@ -27,5 +27,7 @@ jobs:
         shell: bash
       - run: bash test/check-flow.sh
         shell: bash
+      - run: bash test/check-outputs.sh
+        shell: bash
       - run: cabal haddock all
       - run: cabal sdist

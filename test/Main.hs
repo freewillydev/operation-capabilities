@@ -18,6 +18,7 @@ import Data.Typeable (eqT, (:~:)(Refl))
 import Demo
 import Planning
 import FlowTests (flowProperties)
+import OutputTests (outputProperties)
 import System.Exit (exitFailure)
 import Test.QuickCheck hiding (Positive)
 import Test.QuickCheck.Random (mkQCGen)
@@ -197,7 +198,7 @@ main :: IO ()
 main = do
   results <- mapM (\(name,prop) -> putStrLn name >> quickCheckWithResult
     stdArgs {maxSuccess = 10000, replay = Just (mkQCGen 20261009, 0)} prop)
-    (flowProperties ++ [("severity-indexed pure preparation and deferred effects",property severityDispatch),
+    (outputProperties ++ flowProperties ++ [("severity-indexed pure preparation and deferred effects",property severityDispatch),
      ("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
      ("all payload/constructor pairs",property dispatchMatrix), ("lazy mismatches",lazyMismatch),
      ("explicit capability restriction/restoration and deferred effects",property deferredEffects),
