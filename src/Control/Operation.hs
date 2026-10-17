@@ -7,12 +7,12 @@
 -- preparation pipelines. Capability visibility is an API discipline, not a
 -- security sandbox against arbitrary Haskell code or nontermination.
 module Control.Operation (Operation(..), SomeOperation(..), SomeOperationWith, Capabilities, UniqueCapabilities,
-  Subset, Stage(..), Pipeline(..), prepare, pipeline, withCapabilities, forgetCapabilities, execute) where
+  Subset, Stage(..), Pipeline(..), prepare, pipeline, withCapabilities, forgetCapabilities, withOperation, execute) where
 
 import Data.Kind (Constraint, Type)
 import Data.Maybe (fromMaybe)
 import Data.Proxy (Proxy(..))
-import Data.Typeable (Typeable)
+import Data.Typeable (Typeable, eqT, (:~:)(Refl))
 import GHC.TypeLits (ErrorMessage(..), TypeError)
 
 -- | Each payload determines one duplicate-free list of capability classes.
@@ -66,6 +66,15 @@ instance (Member cap caps, Subset rest caps) => Subset (cap ': rest) caps where
 -- | An uninterpreted payload carrying its operation and canonical capabilities.
 data SomeOperation where
   SomeOperation :: (Operation op caps, Capabilities caps op) => op -> SomeOperation
+
+-- | Share payload matching without interpreting a DSL or granting capabilities.
+-- The continuation runs only after eqT/Refl; mismatch forces neither payload nor
+-- continuation. Match the request GADT there to recover its specific methods.
+withOperation :: forall op result. Typeable op
+  => SomeOperation -> (op -> Maybe result) -> Maybe result
+withOperation (SomeOperation (value :: actual)) use = case eqT @actual @op of
+  Just Refl -> use value
+  Nothing -> Nothing
 
 -- | The constructor is private: a stage receives only its visible dictionaries,
 -- while the envelope retains the declared ones for explicit later expansion.

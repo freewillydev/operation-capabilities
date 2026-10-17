@@ -6,7 +6,7 @@
 -- define their own classes and Operation instances rather than expand this class.
 module Control.Operation.Validation (Validation(..), Check(..), DSL(Validate)) where
 
-import Data.Typeable (Typeable, eqT, (:~:)(Refl))
+import Data.Typeable (Typeable)
 import Control.Operation
 
 -- | A reusable validation capability with a domain-specific result type.
@@ -26,7 +26,4 @@ instance Typeable rule => Operation (Check rule) '[Validation] where
   type Outcome (Check rule) = ValidationResult rule
   data DSL (Check rule) where
     Validate :: Context (Check rule) => DSL (Check rule)
-  interpret (SomeOperation (value :: actual)) Validate =
-    case eqT @actual @(Check rule) of
-      Just Refl -> Just (validate value)
-      Nothing -> Nothing
+  interpret operation Validate = withOperation @(Check rule) operation (Just . validate)

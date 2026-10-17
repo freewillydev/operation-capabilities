@@ -6,7 +6,6 @@ import Control.Operation
 import Control.Operation.Indexed
 import Control.Operation.Outputs
 import Data.Proxy (Proxy(..))
-import Data.Typeable (eqT, (:~:)(Refl))
 import GHC.TypeLits (Nat)
 import Type.Reflection (typeRep)
 
@@ -30,9 +29,8 @@ instance Operation Balance BalanceCaps where
   type Context Balance = (Describe "sats" Balance, Describe ('Slot 24) Balance, Adjust Balance)
   type Outcome Balance = String
   data DSL Balance where ReadBalance :: Context Balance => DSL Balance
-  interpret (SomeOperation (value :: actual)) request = case eqT @actual @Balance of
-    Nothing -> Nothing
-    Just Refl -> case request of ReadBalance -> Just (describe (Proxy @"sats") value)
+  interpret operation request = withOperation @Balance operation $ \value ->
+    case request of ReadBalance -> Just (describe (Proxy @"sats") value)
 
 -- These index classes generate different method dictionaries and input types.
 instance IndexedCapability 'TextView where

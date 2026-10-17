@@ -1,7 +1,7 @@
 # Adoption handoff
 
-Use https://github.com/freewillydev/operation-capabilities version `0.1.4.0` at
-commit `6ac223dd3ca81b0e3f7c2c4f355075de1bb56e1f` as a Cabal dependency; this
+Use https://github.com/freewillydev/operation-capabilities version `0.1.5.0` as a
+Cabal dependency, pinned to an exact source commit in the consuming project. This
 includes Flow and existential output capabilities. The package requires GHC 9.6
 or newer and depends only on `base`. Read the README and `examples/Demo.hs` first.
 
@@ -14,10 +14,12 @@ Preserve these design requirements:
    `Capabilities caps op`, using exactly the same `caps`.
 3. Keep `interpret :: SomeOperation -> DSL op -> Maybe (Outcome op)` and the
    injective `Context`, associated `DSL` GADT, and `Outcome` families.
-4. DSL constructors carry specific class constraints. Unpack the existential,
-   match the constructor, compare payload types using `eqT`, and invoke the
-   specific class method directly inside `Just Refl`. No unchecked casts or
-   constraint-type comparisons. `Nothing` means a type mismatch, not a domain error.
+4. DSL constructors carry specific class constraints. Use `withOperation @Payload`
+   to share the payload `eqT`/`Refl` check, then match the constructor and invoke
+   its specific class methods in the continuation. Keep manual `eqT` where the
+   proof is needed explicitly. Prove payload equality before inspecting a request
+   that must stay lazy on mismatch. No unchecked casts or constraint-type
+   comparisons. `Nothing` means a dispatch mismatch, not a domain error.
 5. Keep behavior in focused classes and reusable instances. Use the optional
    `Validation`/`Check` adapter where it removes repetition, not as a universal
    action dispatcher.

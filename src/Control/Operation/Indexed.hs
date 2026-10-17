@@ -7,6 +7,7 @@ module Control.Operation.Indexed
    interpretRequest, interpretIndexed) where
 
 import Control.Operation
+import Control.Monad (join)
 import Data.Kind (Constraint, Type)
 import Data.Proxy (Proxy(..))
 import Data.Type.Equality (type (~~))
@@ -74,6 +75,4 @@ interpretIndexed :: forall k (index :: k) op caps.
   => TypeRep index -> op -> IndexedRequest caps (IndexOutput index)
   -> Maybe (IndexOutput index)
 interpretIndexed expected value request@(IndexedRequest actual _) =
-  case eqTypeRep expected actual of
-    Nothing -> Nothing
-    Just HRefl -> interpretRequest value request
+  join (withMatchingIndex expected actual (interpretRequest value request))

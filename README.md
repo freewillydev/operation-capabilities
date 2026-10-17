@@ -87,6 +87,19 @@ payload mismatch; represent domain validation failures in `Outcome` instead.
 
 ## Complex behavior after Refl
 
+Repeated payload checks can use `withOperation` without changing `interpret`:
+
+```haskell
+interpret operation request = withOperation @Payment operation $ \value ->
+  case request of PlanPayment -> Just (planPayment value)
+```
+
+The helper performs `eqT`/`Refl` before entering the continuation. The request
+GADT still supplies its specific class methods; the helper grants no extra
+capabilities. A mismatched payload leaves both the payload and continuation
+unevaluated. Use this form when the request must also remain lazy on mismatch.
+Manual `eqT` is still appropriate when the equality proof is needed explicitly.
+
 `Just Refl` is not limited to a single method call. Once the payload types are
 equal, combine methods from the constructor's specific classes, branch on their
 results, and return a domain outcome. Keep reusable orchestration in a function

@@ -76,9 +76,8 @@ instance Operation Request RequestCaps where
   type Context Request = Produce Request
   type Outcome Request = Either String [String]
   data DSL Request where Render :: DSL Request
-  interpret (SomeOperation (value :: actual)) request = case eqT @actual @Request of
-    Just Refl -> case request of Render -> Just (runRequest value)
-    Nothing -> Nothing
+  interpret operation request = withOperation @Request operation $ \value ->
+    case request of Render -> Just (runRequest value)
 
 -- The shapes of both batches are existential. Append retains their type-level
 -- concatenation, rather than turning their values into an untyped container.

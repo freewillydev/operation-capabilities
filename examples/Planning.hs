@@ -3,7 +3,6 @@
 module Planning where
 
 import Control.Operation
-import Data.Typeable (eqT, (:~:)(Refl))
 
 class FeeModel op where
   estimateFee :: op -> Integer
@@ -37,7 +36,4 @@ instance Operation Payment '[FeeModel, SpendPolicy] where
   type Outcome Payment = Either String UnsignedTx
   data DSL Payment where
     PlanPayment :: Context Payment => DSL Payment
-  interpret (SomeOperation (value :: actual)) PlanPayment =
-    case eqT @actual @Payment of
-      Just Refl -> Just (planPayment value)
-      Nothing -> Nothing
+  interpret operation PlanPayment = withOperation @Payment operation (Just . planPayment)

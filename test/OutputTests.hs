@@ -121,6 +121,10 @@ streamBoundaries = conjoin
      === Left "stop",
    foldStreamM count (0 :: Int) (throughOutputs (const (Left "stage failed"))
      (OutputStream (Right (Just (emptyOutputs,error "failed stage pulled tail"))))) === Left "stage failed",
+   foldStreamM count (0 :: Int) (throughOutputs (error "empty source invoked stage")
+     (OutputStream (Right Nothing))) === Right 0,
+   foldStreamM count (0 :: Int) (throughOutputs (error "failed source invoked stage")
+     (OutputStream (Left "source failed"))) === Left "source failed",
    foldStreamM count (0 :: Int) (OutputStream (Left "source failed")) === Left "source failed"]
   where
     count n _ = Right (n+1) :: Either String Int

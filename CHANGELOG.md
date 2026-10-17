@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.5.0
+
+- Share lazy payload equality through withOperation without changing interpret,
+  capability visibility, associated request GADTs, or domain outcomes.
+- Remove repeated equality dispatch from the validation adapter and examples.
+- Reuse registered-index matching and the pull-stream constructor; retain
+  existential output schemas, variable arity, and failure/short-circuit behavior.
+- Add matching-laziness and empty/failed-source stream regressions.
+
 ## 0.1.4.0
 
 - Add runtime-variable heterogeneous outputs with a retained type-level spine.

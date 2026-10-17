@@ -152,13 +152,8 @@ unfoldOutputs pull state = OutputStream $
 -- | Transport/prepare batches without resolving an output schema. A stage may
 -- change arity; the resulting existential package retains its new type spine.
 throughOutputs :: Monad m => (SomeOutputs -> m SomeOutputs) -> OutputStream m -> OutputStream m
-throughOutputs stage stream = OutputStream $ do
-  next <- nextOutputs stream
-  case next of
-    Nothing -> pure Nothing
-    Just (batch, rest) -> do
-      prepared <- stage batch
-      pure (Just (prepared, throughOutputs stage rest))
+throughOutputs stage = unfoldOutputs $ \stream -> nextOutputs stream >>=
+  traverse (\(batch, rest) -> (\prepared -> (prepared, rest)) <$> stage batch)
 
 -- | Limit pulls, not individual outputs. A zero limit never touches the source.
 takeOutputs :: Applicative m => Int -> OutputStream m -> OutputStream m

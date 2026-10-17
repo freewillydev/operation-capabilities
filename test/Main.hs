@@ -93,6 +93,16 @@ genericValidation n = conjoin
   [execute (Check (Positive n)) Validate === (n > 0),
    interpret (SomeOperation (Check (Positive n))) (Validate @Positive) === Just (n > 0)]
 
+payloadMatching :: String -> Property
+payloadMatching text = conjoin
+  [withOperation @Note (SomeOperation (Note text)) (\(Note value) -> Just value) === Just text,
+   withOperation @Note (SomeOperation (error "mismatched payload forced" :: Check Positive))
+     (error "mismatched continuation forced" :: Note -> Maybe String) === Nothing,
+   withOperation @Note (SomeOperation (error "matching payload forced" :: Note)) (const (Just ())) === Just (),
+   withOperation @Note (SomeOperation (Note text)) (const Nothing) === (Nothing :: Maybe ()),
+   withOperation @Note (SomeOperation (Note text)) (const (Just (Left "domain rejection")))
+     === (Just (Left "domain rejection") :: Maybe (Either String ()))]
+
 dispatchMatrix :: Integer -> String -> Property
 dispatchMatrix n text = ioProperty $ do
   calls <- newIORef 0
@@ -200,6 +210,7 @@ main = do
     stdArgs {maxSuccess = 10000, replay = Just (mkQCGen 20261009, 0)} prop)
     (outputProperties ++ flowProperties ++ [("severity-indexed pure preparation and deferred effects",property severityDispatch),
      ("runnable example",property demoWorks), ("generic validation instance",property genericValidation),
+     ("shared payload matching preserves laziness and domain outcomes",property payloadMatching),
      ("all payload/constructor pairs",property dispatchMatrix), ("lazy mismatches",lazyMismatch),
      ("explicit capability restriction/restoration and deferred effects",property deferredEffects),
      ("pipeline identity and composition",property composition),

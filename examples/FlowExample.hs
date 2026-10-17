@@ -5,7 +5,6 @@ module FlowExample where
 import Control.Operation
 import Control.Operation.Flow (Flow, Values(..))
 import qualified Control.Operation.Flow as F
-import Data.Typeable (eqT, (:~:)(Refl))
 
 newtype Account = Account Integer
 newtype Verified = Verified Integer deriving (Eq, Show)
@@ -39,14 +38,11 @@ instance Operation Account '[Verify, Settle] where
   type Outcome Account = Flow (Action Account) '[Integer] '[] Integer
   data DSL Account where
     PlanPayment :: Context Account => DSL Account
-  interpret (SomeOperation (_value :: actual)) request =
-    case eqT @actual @Account of
-      Nothing -> Nothing
-      Just Refl -> case request of
-        PlanPayment -> Just $ F.do
-          amount <- F.step VerifyAmount
-          let fee = if amount > 100 then 2 else 1
-          F.step (SettleAmount fee)
+  interpret operation request = withOperation @Account operation $ \_ -> case request of
+    PlanPayment -> Just $ F.do
+      amount <- F.step VerifyAmount
+      let fee = if amount > 100 then 2 else 1
+      F.step (SettleAmount fee)
 
 -- Compilation is pure; the application chooses when and how to evaluate it.
 payment :: Account -> Maybe (Flow (Action Account) '[Integer] '[] Integer)

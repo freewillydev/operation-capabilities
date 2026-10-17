@@ -5,7 +5,6 @@ module Demo where
 import Control.Operation
 import Data.Char (toUpper)
 import Data.Proxy (Proxy(..))
-import Data.Typeable (eqT, (:~:)(Refl))
 
 class Labelled op where
   label :: op -> String
@@ -29,10 +28,7 @@ instance Operation Note NoteCaps where
   type Outcome Note = String
   data DSL Note where
     Rendering :: Context Note => DSL Note
-  interpret (SomeOperation (value :: actual)) Rendering =
-    case eqT @actual @Note of
-      Just Refl -> Just (render value)
-      Nothing -> Nothing
+  interpret operation Rendering = withOperation @Note operation (Just . render)
 
 clean :: Stage '[Labelled, Editable]
 clean = Stage $ \value ->
