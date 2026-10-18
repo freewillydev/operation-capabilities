@@ -5,7 +5,8 @@ them prematurely. Each operation declares its capability classes once. Pipelines
 make changes to the visible subset explicit and statically checked.
 
 The library depends only on `base`. QuickCheck is a test-only dependency.
-Tested with GHC 9.6.7; the severity extension is verified with GHC 9.14.1. MIT licensed. This package is not yet published to Hackage.
+Property tests run with GHC 9.6.7; compile-time rejection tests also pass with
+GHC 9.14.1. MIT licensed. This package is not yet published to Hackage.
 
 **Workflow design:** construct the complete `F.do` in `interpret`, after
 `eqT`/`Refl`, and evaluate it separately. This is an important integration
@@ -30,11 +31,11 @@ To use the package from another Cabal project, add this to `cabal.project`:
 source-repository-package
   type: git
   location: https://github.com/freewillydev/operation-capabilities.git
-  tag: 6ac223dd3ca81b0e3f7c2c4f355075de1bb56e1f
+  tag: v0.2.0.0
 ```
 
-Then add `operation-capabilities ==0.1.4.0` to the component's `build-depends`.
-The full commit SHA includes Flow, variable outputs, and existential output capabilities.
+Then add `operation-capabilities ==0.2.0.0` to the component's `build-depends`.
+For deployment, resolve the version tag and pin its full commit SHA.
 The implementation is in `Control.Operation`; the optional generic rule adapter
 is in `Control.Operation.Validation`.
 
@@ -44,7 +45,7 @@ is in `Control.Operation.Validation`.
 class ( Typeable op
       , Typeable (Context op)
       , UniqueCapabilities caps
-      ) => Operation op (caps :: [Type -> Constraint]) | op -> caps where
+      ) => Operation (op :: Type) (caps :: [kind]) | op -> caps where
   type Context op = (ctx :: Constraint) | ctx -> op
   type Outcome op
   data DSL op
@@ -64,6 +65,9 @@ such as `Renderable Note` naturally distinguish payloads.
 `Capabilities '[Labelled, Editable] Note` means both `Labelled Note` and
 `Editable Note`. The existential uses the **same list** as `Operation`, so packing
 requires all declared dictionaries, not just the operation dictionary.
+Unary class lists use kind `[Type -> Constraint]`; curried descriptors use
+`[Capability]`. Enable `PolyKinds` for generic pipeline helpers, and annotate
+empty lists when their element kind cannot be inferred from the surrounding API.
 
 Put behavior in focused classes. A DSL GADT constructor carries its specific
 constraint; match it and prove equality of the **payload types** before calling
@@ -251,10 +255,10 @@ credentials, or FFI runtime are required.
 
 ## Indexed capability requests after Refl
 
-`Control.Operation.Indexed` adds a kind-polymorphic `IndexedCapability index`
-class without changing `Operation`, `interpret`, or the existing pipelines.
-Its associated `IndexCaps index` selects a list of capability classes;
-`Capabilities (IndexCaps index) op` is the resulting constraint on the payload.
+`Control.Operation.Indexed` adds a kind-polymorphic `IndexedCapability index caps`
+class without changing `interpret` or the existing pipelines. Its functional
+dependency `index -> caps` selects the capability list directly;
+`Capabilities caps op` is the resulting constraint on the payload.
 `IndexInput` and `IndexOutput` give each index its own input and result types.
 
 An `IndexedRequest declared result` carries a `TypeRep index`, its typed input,
@@ -273,14 +277,14 @@ interpret (SomeOperation (value :: actual)) (ObserveIndexed expected request) =
 
 The helper matches the request GADT and compares independently kinded index
 representations with `eqTypeRep`. After `HRefl`, it explicitly restricts the
-capability view to `IndexCaps index` and invokes `runIndexed` with that view.
+capability view to the index's `caps` and invokes `runIndexed` with that view.
 A mismatch returns `Nothing` without evaluating request input or running its
 effects. An `IO` result remains deferred until the caller executes it. Domain
 errors belong in `IndexOutput`, not in dispatch's `Nothing`.
 
 When the DSL deliberately accepts any declared request with the given result,
 use `interpretRequest value request` after payload `Refl`. Matching the request
-GADT supplies the previously hidden `IndexedCapability index` dictionary and
+GADT supplies the previously hidden `IndexedCapability index caps` dictionary and
 subset evidence. This avoids a meaningless comparison of an index with itself.
 Use `interpretIndexed` instead when an independently selected schema must match.
 
@@ -491,25 +495,27 @@ the selected result. The original `Operation.interpret` API is unchanged.
 
 Use `CapabilityOutput index` when each output should hide its own payload and
 carry its own capabilities, rather than using one capability for a whole batch.
-It stores the existing `SomeOperationWith declared (IndexCaps index)` envelope.
+It stores the existing `SomeOperationWith declared caps` envelope, with the
+selected list determined by `IndexedCapability index caps`.
 Prepare that envelope with the existing `Restrict`/`Preserve`/`Expand` tooling;
 no new mechanism can grant methods outside the payload's declared set.
 `SomeCapabilityOutput` also hides the index and its kind.
 
-The existing poly-kinded `IndexedCapability index` class generates the visible
-constraints through `Capabilities (IndexCaps index) payload`. Its capability
+The poly-kinded `IndexedCapability index caps` class generates the visible
+constraints through `Capabilities caps payload`. Its capability
 classes can have additional arguments of different kinds, for example:
 
 ```haskell
 class Describe (label :: k) op where
   describe :: Proxy label -> op -> String
 
-type BalanceCaps = '[Describe "sats", Describe ('Slot 24), Adjust]
+-- The unary shorthand remains available for simple declarations:
+type SimpleCaps = '[Describe "sats", Describe ('Slot 24), Adjust]
 ```
 
 Here `"sats" :: Symbol` and `'Slot 24 :: Slot`. Partial application leaves each
-capability with kind `Type -> Constraint`, which the existing capability list
-can carry. In [examples/CapableOutputs.hs](examples/CapableOutputs.hs), the
+capability with kind `Type -> Constraint`. For variable-arity applications, use
+the descriptors below. In [examples/CapableOutputs.hs](examples/CapableOutputs.hs), the
 `'TextView :: View` index selects `Describe "sats"`, while `'Slot 24 :: Slot`
 selects `Adjust` and `Describe ('Slot 24)`:
 
@@ -522,17 +528,73 @@ textOutput 50 >>= \output -> Right (interpretOutput output (typeRep @('Slot 24))
 -- Right Nothing
 ```
 
-`interpretOutput` matches the carried and requested indices using
-`withMatchingIndex`, whose continuation receives `actual ~~ selected`. Unlike
-the output lists, these indices have independently unknown kinds. The equality
-transports the existing `IndexedCapability actual` dictionary and refines its
-associated capability/input/result families. Only then does `withCapabilities`
+`interpretOutput` matches the carried and requested indices directly with
+`eqTypeRep`/`HRefl`. Unlike the output lists, these indices have independently
+unknown kinds. The equality transports the existing `IndexedCapability actual caps`
+dictionary and refines its input/result families. Only then does `withCapabilities`
 expose the carried methods to `runIndexed selected`. Mismatches do not force the
 payload, input, or methods. Equality never manufactures a dictionary.
 
 `IndexMatch`/`matchIndex` expose the same mechanism for registered requests;
 `discoverRequest` recovers the selected class and subset evidence and builds an
 `IndexedRequest`. An instance merely existing elsewhere is not registration.
+
+### Curried capability applications
+
+`Control.Operation.Capability` carries an unapplied class of any kind through
+zero or more arguments until its result is a `Constraint`:
+
+```haskell
+data Application (cap :: k) (constraint :: Constraint) where
+  Resolved :: (cap ~~ constraint, constraint) => Application cap constraint
+  Argument :: (cap ~~ (function :: argument -> result))
+    => Proxy (value :: argument) -> Application (function value) constraint
+    -> Application cap constraint
+```
+
+Here `~~` refines the initially unknown kind to a function kind at each argument,
+then to `Constraint` at `Resolved`. Pattern matching supplies the final class
+dictionary to `withCapability`. The dictionary must already exist; equality is
+not instance synthesis, casting, or authorization. Each class has a fixed kind,
+but a generic application can carry classes with different arities and argument
+kinds without imposing a single `Type -> Constraint` shape on all of them.
+
+For example, `Quote :: Symbol -> Nat -> Type -> Type -> Constraint` takes four
+arguments, with the operation payload in the third position:
+
+```haskell
+quoteApplication :: forall op. Quote "BTC" 24 op String
+  => Application Quote (Quote "BTC" 24 op String)
+quoteApplication = Argument (Proxy @"BTC") $ Argument (Proxy @24) $
+  Argument (Proxy @op) $ Argument (Proxy @String) Resolved
+```
+
+Capability lists can retain that application structure instead of requiring
+every class to be partially applied to a unary form:
+
+```haskell
+type Quotation = 'Apply ('OnPayload ('Apply ('Apply ('Class Quote) "BTC") 24)) String
+type Adjustment = 'OnPayload ('Class Adjust)
+type BalanceCaps = '[Quotation, Adjustment]
+
+instance IndexedCapability 'QuoteView '[Quotation] where
+  type IndexInput 'QuoteView = ()
+  type IndexOutput 'QuoteView = String
+  runIndexed _ (value :: op) () = withCapability (quoteApplication @op) $
+    quote (Proxy @"BTC") (Proxy @24) value
+```
+
+`Class` retains the original class, `Apply` supplies a kind-checked argument,
+and `OnPayload` inserts the hidden operation at any position. `Capabilities`
+resolves the complete descriptor to `Constraint`; incomplete or wrongly kinded
+applications do not supply methods. `Restrict`, `Preserve`, and `Expand` work
+unchanged and can only select declared descriptors. Uniqueness is checked on
+descriptors, not semantic equivalence of arbitrary constraint expressions.
+
+The executable examples and tests cover zero, one, two and four arguments;
+wrong kinds, unfinished applications, fabricated dictionaries and unavailable
+methods are compile-time rejection cases. Version 0.2 replaces an instance's
+separate `IndexCaps` declaration with `IndexedCapability index caps`.
 
 ### Deferred pull streams
 

@@ -2,6 +2,7 @@
 module OutputTests (outputProperties) where
 
 import Control.Operation
+import Control.Operation.Capability
 import Control.Operation.Flow (Values(..))
 import Control.Operation.Outputs
 import Control.Operation.Indexed
@@ -12,6 +13,7 @@ import Demo (Note(..))
 import Test.QuickCheck
 import VariableOutputs
 import Type.Reflection (typeRep)
+import GHC.TypeLits (Symbol)
 
 newtype Unregistered = Unregistered Int
 instance RenderOutput Unregistered where
@@ -26,6 +28,8 @@ outputProperties =
    ("outputs / consumer failure skips later values", once lazyConsumption),
    ("outputs / preparation failure and dispatch mismatch", once preparation),
    ("outputs / existential capabilities with independently kinded parameters", property capable),
+   ("outputs / curried capabilities resolve at arities zero, one, two and four", property applications),
+   ("outputs / descriptor restriction, preparation and expansion", property descriptorPipeline),
    ("outputs / generic streams preserve variable batches", property streaming),
    ("outputs / bounded demand and failed consumers stop pulls", once streamBoundaries)]
 
@@ -98,6 +102,31 @@ capable n delta = case (C.textOutput n, C.slotOutput n) of
        Just IndexMatch -> True
        Nothing -> False)]
   _ -> counterexample "capability restriction failed" False
+
+applications :: Integer -> Property
+applications n = conjoin
+  [applicationArity (Resolved :: Application (Eq Int) (Eq Int)) === 0,
+   applicationArity (Argument (Proxy @Int) Resolved :: Application Show (Show Int)) === 1,
+   applicationArity (Argument (Proxy @"sats") (Argument (Proxy @C.Balance) Resolved)
+     :: Application (C.Describe @Symbol) (C.Describe "sats" C.Balance)) === 2,
+   applicationArity (C.quoteApplication @C.Balance) === 4,
+   withCapability (C.quoteApplication @C.Balance)
+     (C.quote (Proxy @"BTC") (Proxy @24) (C.Balance n)) === "BTC / slot 24: " ++ show n,
+   (C.quoteOutput n >>= \o -> Right (interpretOutput o (typeRep @'C.QuoteView) ()))
+     === Right (Just ("BTC / slot 24: " ++ show n)),
+   (C.quoteOutput n >>= \o -> Right (interpretOutput o (typeRep @'C.TextView) undefined))
+     === Right Nothing]
+
+descriptorPipeline :: Integer -> Integer -> Property
+descriptorPipeline n delta =
+  let stages = Restrict (Proxy @'[C.Adjustment]) :>>>
+        Preserve (Stage (Right . C.adjust delta)) :>>>
+        Expand (Proxy @C.BalanceCaps) :>>> Restrict (Proxy @'[C.Quotation])
+  in case pipeline stages (prepare (C.Balance n)) of
+    Left message -> counterexample message False
+    Right prepared -> interpretOutput
+      (SomeCapabilityOutput (CapabilityOutput (typeRep @'C.QuoteView) prepared))
+      (typeRep @'C.QuoteView) () === Just ("BTC / slot 24: " ++ show (n+delta))
 
 streaming :: [[Either Integer String]] -> Property
 streaming batches =

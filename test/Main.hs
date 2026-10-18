@@ -49,24 +49,25 @@ instance Operation Counter CounterCaps where
       Just Refl -> interpretIndexed expected value request
       Nothing -> Nothing
 
-instance IndexedCapability (24 :: Nat) where
-  type IndexCaps 24 = '[Adjustable, Observed]
-  type IndexInput 24 = Integer
-  type IndexOutput 24 = IO Integer
+data CountIndex = CountAt Nat
+data ReadIndex = ReadAs Symbol
+
+instance IndexedCapability ('CountAt 24) '[Adjustable, Observed] where
+  type IndexInput ('CountAt 24) = Integer
+  type IndexOutput ('CountAt 24) = IO Integer
   runIndexed _ value delta = observe (adjust (+delta) value)
 
-instance IndexedCapability ("read" :: Symbol) where
-  type IndexCaps "read" = '[Observed]
-  type IndexInput "read" = ()
-  type IndexOutput "read" = IO Integer
+instance IndexedCapability ('ReadAs "read") '[Observed] where
+  type IndexInput ('ReadAs "read") = ()
+  type IndexOutput ('ReadAs "read") = IO Integer
   runIndexed _ value () = observe value
 
 indexedDispatch :: Integer -> Integer -> Property
 indexedDispatch n delta = ioProperty $ do
   calls <- newIORef 0
   let value = Counter n calls
-      slot = typeRep @(24 :: Nat)
-      schema = typeRep @("read" :: Symbol)
+      slot = typeRep @('CountAt 24)
+      schema = typeRep @('ReadAs "read")
       request = IndexedRequest slot delta
       run op rep req = sequence (interpret op (ObserveIndexed rep req))
   changed <- run (SomeOperation value) slot request

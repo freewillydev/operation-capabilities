@@ -1,6 +1,6 @@
 cabal-version: 2.4
 name: operation-capabilities
-version: 0.1.5.0
+version: 0.2.0.0
 synopsis: Capability-constrained existential operations and typed pipelines
 description:
   Declare a unique capability list for each operation, preserve class dictionaries
@@ -22,6 +22,7 @@ extra-doc-files:
   docs/HANDOFF.md
 extra-source-files:
   test/CapabilityTypes.hs
+  test/CapabilityApplications.hs
   test/check-capabilities.sh
   test/FlowTypes.hs
   test/check-flow.sh
@@ -34,7 +35,8 @@ source-repository head
 
 library
   exposed-modules: Control.Operation, Control.Operation.Validation, Control.Operation.Severity, Control.Operation.Indexed,
-    Control.Operation.Flow, Control.Operation.Flow.Rebindable, Control.Operation.Outputs
+    Control.Operation.Flow, Control.Operation.Flow.Rebindable, Control.Operation.Outputs,
+    Control.Operation.Capability
   hs-source-dirs: src
   build-depends: base >=4.18 && <5
   default-language: Haskell2010

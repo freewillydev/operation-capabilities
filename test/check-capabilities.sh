@@ -54,3 +54,31 @@ for variant in WRONG_CALLER WRONG_SEVERITY WRONG_RESULT WRONG_PROGRAM COERCE_CAL
     fi
     printf 'PASS %s rejected for the expected type error\n' "$variant"
 done
+
+compile_applications() {
+    "${GHC:-ghc}" -v0 -fno-code -fforce-recomp -Wall -Werror -no-user-package-db -package-env - \
+        -hide-all-packages -package base -i"$root/src" -i"$root/examples" \
+        -odir "$work" -hidir "$work" "$root/test/CapabilityApplications.hs" "$@"
+}
+compile_applications
+printf 'PASS curried capability applications and restricted methods\n'
+for variant in WRONG_KIND WRONG_RESULT INCOMPLETE FORGED_DICTIONARY HIDDEN_METHOD UNDECLARED DUPLICATE; do
+    if compile_applications "-D$variant" > "$work/$variant.log" 2>&1; then
+        printf 'FAIL %s unexpectedly compiled\n' "$variant" >&2
+        exit 1
+    fi
+    case "$variant" in
+        WRONG_KIND) expected="Couldn't match kind" ;;
+        INCOMPLETE) expected="Couldn't match (kind|type)" ;;
+        WRONG_RESULT) expected="Couldn't match type" ;;
+        FORGED_DICTIONARY) expected='No instance for.*Show Missing' ;;
+        HIDDEN_METHOD) expected='Could not deduce.*Quote' ;;
+        UNDECLARED) expected='No instance for' ;;
+        DUPLICATE) expected='Duplicate operation capability' ;;
+    esac
+    if ! grep -Eq "$expected" "$work/$variant.log"; then
+        cat "$work/$variant.log" >&2
+        exit 1
+    fi
+    printf 'PASS curried %s rejected for the expected type error\n' "$variant"
+done

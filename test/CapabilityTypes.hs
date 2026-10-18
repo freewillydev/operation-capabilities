@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP, ConstraintKinds, DataKinds, FlexibleContexts, GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses, TypeFamilies, TypeApplications #-}
+{-# LANGUAGE CPP, ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeFamilies, TypeApplications, KindSignatures #-}
 -- Compile the positive case and intentionally ill-typed variants separately.
 module CapabilityTypes where
 
@@ -7,24 +7,26 @@ import Data.Proxy (Proxy(..))
 import Control.Operation
 import Control.Operation.Indexed
 import Type.Reflection (typeRep)
+#ifdef INDEX_ARBITRARY
+import Data.Kind (Constraint, Type)
+#endif
 #ifdef COERCE_VIEW
 import Data.Coerce (coerce)
 #endif
 
 data Request = Request
 data NameIndex
-instance IndexedCapability NameIndex where
 #ifdef INDEX_DUPLICATE
-  type IndexCaps NameIndex = '[Named, Named]
+instance IndexedCapability NameIndex '[Named, Named] where
 #else
-  type IndexCaps NameIndex = '[Named]
+instance IndexedCapability NameIndex '[Named] where
 #endif
   type IndexInput NameIndex = ()
   type IndexOutput NameIndex = String
   runIndexed _ value () = name value
 
 #ifdef INDEX_ARBITRARY
-indexed :: IndexedRequest '[] String
+indexed :: IndexedRequest ('[] :: [Type -> Constraint]) String
 #else
 indexed :: IndexedRequest '[Named] String
 #endif

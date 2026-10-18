@@ -15,31 +15,32 @@ module Control.Operation.Outputs
 
 import Control.Operation (SomeOperationWith, withCapabilities)
 import Control.Operation.Flow (Values(..))
-import Control.Operation.Indexed (IndexedCapability(..), withMatchingIndex)
+import Control.Operation.Indexed (IndexedCapability(..))
 import Data.Kind (Constraint, Type)
 import Data.Proxy (Proxy(..))
 import Data.Typeable (Typeable)
-import Type.Reflection (TypeRep)
+import Type.Reflection (TypeRep, eqTypeRep, (:~~:)(HRefl))
 
 -- | Each output hides its own operation payload and declared capabilities.
 -- The index class generates the visible constraints, including partially
 -- applied classes with parameters of different kinds. Prepare the view using
 -- the ordinary Restrict/Preserve/Expand pipeline before constructing an output.
 data CapabilityOutput (index :: k) where
-  CapabilityOutput :: IndexedCapability index
-    => TypeRep index -> SomeOperationWith declared (IndexCaps index) -> CapabilityOutput index
+  CapabilityOutput :: IndexedCapability index caps
+    => TypeRep index -> SomeOperationWith declared caps -> CapabilityOutput index
 
 data SomeCapabilityOutput where
   SomeCapabilityOutput :: CapabilityOutput index -> SomeCapabilityOutput
 
 -- | Like interpret: mismatch is Nothing; effects/domain failure remain in the
--- selected result. (~~) also refines IndexCaps, bringing the carried methods
+-- selected result. HRefl also refines the capability list, bringing its methods
 -- into scope for the independently kinded selected index.
 interpretOutput :: SomeCapabilityOutput -> TypeRep selected -> IndexInput selected
   -> Maybe (IndexOutput selected)
 interpretOutput (SomeCapabilityOutput (CapabilityOutput actual prepared)) selected input =
-  withMatchingIndex actual selected $
-    withCapabilities (\value -> runIndexed selected value input) prepared
+  case eqTypeRep actual selected of
+    Nothing -> Nothing
+    Just HRefl -> Just (withCapabilities (\value -> runIndexed selected value input) prepared)
 
 data OutputTypes (xs :: [Type]) where
   NoTypes :: OutputTypes '[]

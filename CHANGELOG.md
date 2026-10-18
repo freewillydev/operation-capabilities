@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0.0
+
+- Remove the shared index-matching continuation helper. Runtime existential
+  dispatch uses explicit equality evidence; capability applications carry `~~`
+  in GADT constructors until their final constraint dictionary is available.
+- Add kind-polymorphic, variadic capability descriptors with payload insertion
+  at any argument position. Retain unary lists for simple operations.
+- Keep declared-capability restriction, expansion and uniqueness checks for both
+  forms. `IndexedCapability index caps` now declares its list directly through a
+  functional dependency, replacing the separate `IndexCaps` associated family.
+- Exercise zero-, one-, two- and four-argument applications, independently kinded
+  arguments, restricted output methods and compile-time rejection boundaries.
+
 ## 0.1.5.0
 
 - Share lazy payload equality through withOperation without changing interpret,

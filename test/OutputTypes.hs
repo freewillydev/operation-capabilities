@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, DataKinds, GADTs, ScopedTypeVariables, TypeApplications, TypeOperators #-}
+{-# LANGUAGE CPP, DataKinds, GADTs, KindSignatures, ScopedTypeVariables, TypeApplications, TypeOperators #-}
 module OutputTypes where
 
 import Control.Operation
@@ -7,6 +7,9 @@ import Control.Operation.Indexed
 import qualified CapableOutputs as C
 import Type.Reflection (typeRep)
 import VariableOutputs
+#ifdef REGISTRY_ARBITRARY
+import Control.Operation.Capability (Capability)
+#endif
 
 valid :: CheckedOutputs RenderOutput '[Amount] -> CheckedOutputs RenderOutput '[Notice]
   -> CheckedOutputs RenderOutput '[Amount, Notice]
@@ -43,7 +46,7 @@ bad :: SomeOperationWith C.BalanceCaps '[] -> CapabilityOutput 'C.TextView
 bad = CapabilityOutput (typeRep @'C.TextView)
 #endif
 #ifdef REGISTRY_ARBITRARY
-bad :: Maybe (IndexMatch '[] 'C.TextView 'C.TextView)
+bad :: Maybe (IndexMatch ('[] :: [Capability]) 'C.TextView 'C.TextView)
 bad = matchIndex (typeRep @'C.TextView) (typeRep @'C.TextView)
 #endif
 #ifdef WRONG_REQUEST_RESULT

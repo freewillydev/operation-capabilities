@@ -1,6 +1,6 @@
 # Adoption handoff
 
-Use https://github.com/freewillydev/operation-capabilities version `0.1.5.0` as a
+Use https://github.com/freewillydev/operation-capabilities version `0.2.0.0` as a
 Cabal dependency, pinned to an exact source commit in the consuming project. This
 includes Flow and existential output capabilities. The package requires GHC 9.6
 or newer and depends only on `base`. Read the README and `examples/Demo.hs` first.
@@ -76,11 +76,20 @@ the package. See README's variable output schemas section for semantics and limi
 
 For outputs that each carry a hidden payload and their own methods, use
 `CapabilityOutput`/`SomeCapabilityOutput`. The carried `SomeOperationWith` view
-is selected by `IndexCaps`; capability parameters may have different kinds.
-`withMatchingIndex` grants `(actual ~~ selected)` only after `eqTypeRep` succeeds,
-transporting the carried index class and its associated constraint families.
+is selected by `IndexedCapability index caps` with `index -> caps`. Runtime
+index dispatch uses explicit `eqTypeRep`/`HRefl`, transporting the carried class.
 `interpretOutput` then invokes `runIndexed` using only visible methods. See
 `CapableOutputs` for a class parameterized by both Symbol and a promoted Slot.
 Use `OutputStream` to keep batches uninterpreted across demand-driven stages.
 Ordinary output-list equality remains homogeneous; do not use `(~~)` just because
 a list contains heterogeneous values. Preserve native callback lifetimes.
+
+Use `Control.Operation.Capability` for curried classes with varying arities and
+argument kinds. `Application` uses `cap ~~ function` in its `Argument` GADT and
+`cap ~~ constraint` in `Resolved`; only the terminal carries a real constraint
+dictionary. `withCapability` exposes its methods, never synthesizes instances.
+Declare such capabilities with `Class`, `Apply` and `OnPayload` descriptors; the
+payload can appear at any argument position. The usual restriction/expansion
+rules still apply. Unary lists remain the short form for simple operations.
+See `quoteApplication` and `Quotation` in `CapableOutputs` for a four-argument
+class using Symbol, Nat, and Type arguments, with the payload third.
